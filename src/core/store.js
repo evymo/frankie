@@ -38,6 +38,9 @@ class RunStore {
           simulated: r.provider && r.provider.simulated, decision: r.decision && r.decision.code,
           verdicts: (r.branches || []).map((b) => b.finalVerdict).filter(Boolean),
           promptPreview: String(r.input && r.input.prompt || '').slice(0, 120), parentRunId: r.input && r.input.parentRunId,
+          experiment: r.experiment ? { baseRunId: r.experiment.baseRunId, recommendationId: r.experiment.recommendationId } : null,
+          aspectSet: r.gate0 && r.gate0.aspectSet ? r.gate0.aspectSet.id : null,
+          learningMode: r.learning && r.learning.selection ? r.learning.selection.mode : null,
         };
       } catch (_) { return null; }
     }).filter(Boolean).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));

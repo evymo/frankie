@@ -1,16 +1,20 @@
 'use strict';
 /**
  * Lokální HTTP server FRANKENSTEIN (jen 127.0.0.1). Bez závislostí.
- * API: stav, preflight, spuštění běhu (zámek = max. 1 běh), detail/historie, export JSON a exekučních promptů.
+ * API: stav, preflight, spuštění běhu (zámek = max. 1 běh), detail/historie, export JSON a exekučních promptů,
+ * v0.4: přehled lokální Knowledge Base a řízený experiment H-sestavy (spouští jen uživatel).
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { loadConfig, ROOT } = require('./config');
 const { RunStore } = require('./core/store');
-const { RunManager, PHASES, FrError } = require('./core/pipeline');
+const { RunManager, PHASES, STEP_LABEL, FrError, FR_VERSION } = require('./core/pipeline');
+const { KnowledgeBase } = require('./core/knowledge');
+const { EVALUATOR_VERSION, EVALUATOR_HISTORY } = require('./core/evaluator');
+const { DEFAULT_SET } = require('./core/aspectSets');
 const { createProviders } = require('./providers');
-const { ASPECTS } = require('./core/aspects');
+const { ASPECTS, ASPECT_CATALOG, CORE_ASPECT_IDS } = require('./core/aspects');
 const { RULES } = require('./core/decision');
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8' };
@@ -19,7 +23,9 @@ function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data')
   const store = new RunStore(path.join(dataDir, 'runs'));
   const interrupted = store.recoverInterrupted();
   providers = providers || createProviders(config);
-  const manager = new RunManager({ store, config, providers });
+  // Knowledge Base je lokální (data/kb, v .gitignore) — obsahuje zkušenosti z běhů uživatele.
+  const kb = new KnowledgeBase({ file: path.join(dataDir, 'kb', 'fr-kb.json'), config });
+  const manager = new RunManager({ store, config, providers, kb });
   const publicDir = path.join(ROOT, 'public');
   let preflightCache = null;
   let preflightRunning = null;
@@ -70,16 +76,24 @@ function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data')
         if (p === '/api/status' && req.method === 'GET') {
           const active = manager.busy();
           return send(res, 200, {
-            version: '0.3.1', defaultProvider: config.defaultProvider, providers: Object.values(providers).map((x) => x.describe()),
+            version: FR_VERSION, defaultProvider: config.defaultProvider, providers: Object.values(providers).map((x) => x.describe()),
             preflight: preflightCache, busy: active ? { id: active.id, state: active.state } : null, limits: config.limits,
-            capabilities: config.capabilities, permissions: config.permissions, aspects: ASPECTS, phases: PHASES, decisionRules: RULES, interruptedOnStart: interrupted,
+            capabilities: config.capabilities, permissions: config.permissions, aspects: ASPECTS, aspectCatalog: ASPECT_CATALOG, coreAspects: CORE_ASPECT_IDS, defaultAspectSet: DEFAULT_SET, phases: PHASES, stepLabels: STEP_LABEL, decisionRules: RULES, interruptedOnStart: interrupted,
+            evaluator: { version: EVALUATOR_VERSION, history: EVALUATOR_HISTORY },
+            learning: { enabled: config.learning.enabled, verifyMinWins: config.learning.verifyMinWins, realExperiments: { enabled: config.learning.realExperiments.enabled, maxPerDay: config.learning.realExperiments.maxPerDay }, kbAvailable: kb.available(), kbError: kb.error },
           });
         }
         if (p === '/api/preflight' && req.method === 'POST') return send(res, 200, await getPreflight(true));
         if (p === '/api/runs' && req.method === 'GET') return send(res, 200, store.list());
         if (p === '/api/runs' && req.method === 'POST') {
           const body = await readBody(req);
-          const { run } = manager.start({ prompt: body.prompt, explicitGoal: body.explicitGoal, provider: body.provider, baseline: !!body.baseline, parentRunId: body.parentRunId || null, clarificationAnswer: body.clarificationAnswer });
+          const { run } = manager.start({ prompt: body.prompt, explicitGoal: body.explicitGoal, provider: body.provider, baseline: !!body.baseline, parentRunId: body.parentRunId || null, clarificationAnswer: body.clarificationAnswer, learningMode: body.learningMode === 'default' ? 'default' : 'auto' });
+          return send(res, 202, { id: run.id, state: run.state });
+        }
+        if (p === '/api/kb' && req.method === 'GET') return send(res, 200, kb.summary());
+        if (p === '/api/experiments' && req.method === 'POST') {
+          const body = await readBody(req);
+          const { run } = manager.start({ provider: body.provider, experiment: { baseRunId: String(body.baseRunId || ''), recommendationId: String(body.recommendationId || ''), confirmRealCalls: body.confirmRealCalls === true } });
           return send(res, 202, { id: run.id, state: run.state });
         }
         const m = p.match(/^\/api\/runs\/([A-Za-z0-9-]+)(\/export|\/prompt\/([A-Za-z0-9]+)\/(\d+))?$/);
@@ -105,12 +119,12 @@ function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data')
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'" });
       fs.createReadStream(file).pipe(res);
     } catch (e) {
-      const code = e.code === 'BUSY' ? 409 : ['BAD_INPUT', 'BAD_PARENT', 'BAD_PROVIDER', 'BAD_JSON', 'TOO_LARGE'].includes(e.code) ? 400 : 500;
+      const code = e.code === 'BUSY' ? 409 : e.code === 'NOT_AUTHORIZED' ? 403 : ['BAD_INPUT', 'BAD_PARENT', 'BAD_PROVIDER', 'BAD_JSON', 'TOO_LARGE', 'BAD_EXPERIMENT'].includes(e.code) ? 400 : 500;
       send(res, code, { error: e.message, code: e.code || 'INTERNAL' });
     }
   });
 
-  return { server, store, manager, getPreflight, providers };
+  return { server, store, manager, getPreflight, providers, kb };
 }
 
 if (require.main === module) {
@@ -118,7 +132,7 @@ if (require.main === module) {
   const port = parseInt(process.env.FR_PORT || config.server.port, 10);
   const { server, getPreflight } = createServer({ config });
   server.listen(port, '127.0.0.1', () => {
-    console.log(`FRANKENSTEIN v0.3.1 běží na http://127.0.0.1:${port}`);
+    console.log(`FRANKENSTEIN v${FR_VERSION} běží na http://127.0.0.1:${port}`);
     console.log(`Výchozí provider: ${config.defaultProvider}. Preflight Claude CLI běží na pozadí (bez inference).`);
     getPreflight(true).then((pf) => {
       console.log(`Preflight Claude CLI: ${pf.ok ? 'OK — reálná inference povolena' : 'NEPROŠEL — reálná inference zablokována (mock funguje)'}`);

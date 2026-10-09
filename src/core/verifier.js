@@ -9,6 +9,7 @@ const { runDeterministic } = require('./criteria');
 const { SEMANTIC_VERIFY } = require('./schemas');
 const { semanticVerifyPrompt } = require('../templates/analysis');
 const { isQuoteIn } = require('./util');
+const { EVALUATOR_VERSION } = require('./evaluator');
 
 const VERDICTS = ['PASS', 'PARTIAL', 'FAIL', 'UNVERIFIED'];
 
@@ -91,7 +92,7 @@ async function verify({ contract, execution, callModel, config, canCallModel, pr
 
   const v = computeVerdict(out);
   const deviations = out.filter((r) => r.result !== 'PASS').map((r) => ({ criterionId: r.criterionId, mandatory: r.mandatory, result: r.result, deviation: r.deviation || r.evidence }));
-  return { criteria: out, verdict: v.verdict, counts: v.counts, deviations, semanticCall, durationMs: Date.now() - started };
+  return { evaluator: EVALUATOR_VERSION, criteria: out, verdict: v.verdict, counts: v.counts, deviations, semanticCall, durationMs: Date.now() - started };
 }
 
 /** Je selhání opravitelné jedním řízeným průchodem? (čistá funkce) */

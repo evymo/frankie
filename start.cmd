@@ -1,5 +1,5 @@
 @echo off
-rem FRANKENSTEIN v0.3 - lokalni server (http://127.0.0.1:4173)
+rem FRANKENSTEIN v0.4 - lokalni server (http://127.0.0.1:4173)
 rem Node.js 22+: z PATH, nebo nastavte FR_NODE na cestu k node.exe
 setlocal
 cd /d "%~dp0"

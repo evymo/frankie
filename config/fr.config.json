@@ -53,5 +53,15 @@
   },
   "executor": {
     "preferDeterministicTools": true
+  },
+  "learning": {
+    "enabled": true,
+    "verifyMinWins": 2,
+    "maxExperiences": 1000,
+    "realExperiments": {
+      "enabled": false,
+      "maxPerDay": 3,
+      "note": "Řízený experiment s reálnou inferencí (3–5 volání Claude CLI) spouští jen uživatel v UI s výslovným potvrzením. Povolit lze až po souhlasu člověka: enabled=true. Simulované (mock) experimenty jsou povolené vždy a do důvěryhodnosti se nezapočítávají."
+    }
   }
 }

@@ -56,7 +56,13 @@ function systemCriteria(expectedFormat, blockedOperations = []) {
   ];
   if (expectedFormat === 'json') list.push({ id: 'SYS-3', description: 'Výstup je platný JSON.', mandatory: true, verification: { kind: 'deterministic', type: 'json_valid', params: {} }, origin: 'system' });
   if (expectedFormat === 'code') list.push({ id: 'SYS-3', description: 'Výsledek obsahuje artefakt s kódem.', mandatory: true, verification: { kind: 'deterministic', type: 'code_artifact_present', params: {} }, origin: 'system' });
-  if (blockedOperations.length) list.push({ id: 'SYS-4', description: 'Celé zadání je splnitelné v rámci oprávnění (bez blokovaných částí).', mandatory: true, verification: { kind: 'deterministic', type: 'blocked_scope', params: {} }, origin: 'system', repairable: false });
+  if (blockedOperations.length) {
+    // Hodnotitel 1.1.0: verdikt ovlivní jen blokovaná operace s doslovnou oporou v zadání (záznamy bez příznaku = starší chování).
+    const supported = blockedOperations.some((o) => o.literalSupport !== false);
+    list.push(supported
+      ? { id: 'SYS-4', description: 'Celé zadání je splnitelné v rámci oprávnění (bez blokovaných částí).', mandatory: true, verification: { kind: 'deterministic', type: 'blocked_scope', params: {} }, origin: 'system', repairable: false }
+      : { id: 'SYS-4', description: 'Operace mimo oprávnění uvedl jen model v analýze, v zadání nemají doslovnou oporu — eviduje se, verdikt neovlivní (hodnotitel 1.1.0).', mandatory: false, verification: { kind: 'deterministic', type: 'blocked_scope', params: {} }, origin: 'system', repairable: false });
+  }
   return list;
 }
 

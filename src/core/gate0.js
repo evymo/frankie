@@ -4,9 +4,12 @@
  *  - ověření citací (důkazy) proti původnímu zadání,
  *  - H7/H8 přepsány systémovými fakty z konfigurace (AI tvrzení zůstává jen jako „aiClaim“),
  *  - deterministické detektory (injection, citlivá data, operace) → minimální priority,
- *  - dynamické pořadí priorit.
+ *  - dynamické pořadí priorit,
+ *  - v0.4: zpracování podle zvolené H-sestavy (minimální priority a stropy adaptivních hledisek; systémové
+ *    garance H1/H7/H8/H9 jsou v každé sestavě a jejich pravidla se uplatní vždy až PO pravidlech sestavy).
  */
-const { ASPECTS, PRIORITIES, maxPriority } = require('./aspects');
+const { PRIORITIES, maxPriority, minPriority } = require('./aspects');
+const { DEFAULT_SET, resolveAspects, setRef, refLabel } = require('./aspectSets');
 const { isQuoteIn, clone } = require('./util');
 const { detectInjection, detectSensitiveData, detectOperations } = require('./detectors');
 const { TOOLS } = require('../tools');
@@ -20,20 +23,23 @@ function placeholderAspect(id) {
 }
 
 /** Systémová fakta o schopnostech a oprávněních — autoritou je konfigurace, ne AI. */
-function systemFacts(config, modelOut, detectedOps) {
+function systemFacts(config, modelOut, detectedOps, prompt = '') {
   const caps = config.capabilities || {};
   const required = Array.from(new Set(modelOut.requiredCapabilities || []));
   const available = required.filter((c) => caps[c] === true);
   const unavailable = required.filter((c) => caps[c] !== true);
   const allowedCats = new Set(config.permissions.allowedOperationCategories);
   const ops = [...(modelOut.requestedOperations || []).map((o) => ({ ...o, source: 'model' })), ...detectedOps];
+  // Doslovná opora v zadání (hodnotitel 1.1.0, SYS-4): kategorii zachytil deterministický detektor přímo v textu,
+  // nebo je text operace v zadání doslova. Operace „vymyšlená“ modelem oporu nemá.
+  const detectedCats = new Set(detectedOps.map((o) => o.category));
   const seen = new Set();
   const operations = [];
   for (const o of ops) {
     const key = o.category + '|' + o.operation;
     if (seen.has(key)) continue;
     seen.add(key);
-    operations.push({ ...o, allowed: allowedCats.has(o.category) });
+    operations.push({ ...o, allowed: allowedCats.has(o.category), literalSupport: detectedCats.has(o.category) || isQuoteIn(o.operation, prompt) });
   }
   return {
     capabilitiesConfig: caps,
@@ -58,20 +64,23 @@ function validateToolCandidates(candidates, prompt) {
   });
 }
 
-function processGate0(modelOut, { prompt, config }) {
+function processGate0(modelOut, { prompt, config, aspectSet = DEFAULT_SET }) {
   const raw = clone(modelOut);
   const byId = new Map((modelOut.aspects || []).map((a) => [a.id, a]));
   const injection = detectInjection(prompt);
   const sensitive = detectSensitiveData(prompt);
   const detectedOps = detectOperations(prompt);
-  const facts = systemFacts(config, modelOut, detectedOps);
+  const facts = systemFacts(config, modelOut, detectedOps, prompt);
+  const defs = resolveAspects(aspectSet);
   const adjustments = [];
 
-  const aspects = ASPECTS.map((def) => {
+  const aspects = defs.map((def) => {
     const src = byId.get(def.id) ? clone(byId.get(def.id)) : placeholderAspect(def.id);
     const a = {
       ...src,
       name: def.name,
+      kind: def.kind,
+      definitionVersion: def.version,
       aiPriority: src.priority,
       evidence: (src.evidence || []).map((q) => ({ quote: q, verified: isQuoteIn(q, prompt) })),
       nonGoals: src.nonGoals || [], contradictions: src.contradictions || [], dependencies: src.dependencies || [],
@@ -82,12 +91,23 @@ function processGate0(modelOut, { prompt, config }) {
     return a;
   });
   const get = (id) => aspects.find((a) => a.id === id);
+  const ref = refLabel(setRef(aspectSet));
+  // 1) Pravidla H-sestavy: strop (jen adaptivní hlediska), pak minimální priorita.
+  for (const [id, p] of Object.entries(aspectSet.caps || {})) {
+    const a = get(id);
+    if (!a || a.kind === 'core') continue;
+    const np = minPriority(a.finalPriority, p);
+    if (np !== a.finalPriority) { adjustments.push({ aspect: id, from: a.finalPriority, to: np, rule: `H-sestava ${ref}: strop priority ${p}` }); a.finalPriority = np; }
+  }
   const floor = (id, p, rule) => {
     const a = get(id);
     const np = maxPriority(a.finalPriority, p);
     if (np !== a.finalPriority) { adjustments.push({ aspect: id, from: a.finalPriority, to: np, rule }); a.finalPriority = np; }
   };
 
+  for (const [id, p] of Object.entries(aspectSet.floors || {})) if (get(id)) floor(id, p, `H-sestava ${ref}: minimální priorita ${p}`);
+
+  // 2) Systémové garance — vždy, nezávisle na sestavě.
   // H7 — schopnosti určuje konfigurace.
   const h7 = get('H7');
   h7.aiClaim = h7.finding;
@@ -129,11 +149,12 @@ function processGate0(modelOut, { prompt, config }) {
   const unverifiedEvidence = aspects.flatMap((a) => a.evidence.filter((e) => !e.verified).map((e) => ({ aspect: a.id, quote: e.quote })));
 
   const dynamicPriorities = [...aspects]
-    .sort((x, y) => PRIORITIES.indexOf(x.finalPriority) - PRIORITIES.indexOf(y.finalPriority) || ASPECTS.findIndex((d) => d.id === x.id) - ASPECTS.findIndex((d) => d.id === y.id))
+    .sort((x, y) => PRIORITIES.indexOf(x.finalPriority) - PRIORITIES.indexOf(y.finalPriority) || defs.findIndex((d) => d.id === x.id) - defs.findIndex((d) => d.id === y.id))
     .map((a) => ({ id: a.id, name: a.name, priority: a.finalPriority }));
 
   return {
     taskType: modelOut.taskType,
+    aspectSet: setRef(aspectSet),
     aspects,
     h1Goal: clone(modelOut.h1Goal),
     systemFacts: facts,

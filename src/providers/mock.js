@@ -120,7 +120,7 @@ function capabilitiesFor(type, ops) {
   return [...base, ...extra];
 }
 
-function mockGate0({ prompt, clarifications }) {
+function mockGate0({ prompt, clarifications, aspects: setAspects }) {
   const text = `${prompt}\n${clarText(clarifications)}`;
   const type = guessTaskType(text);
   const vague = isVague(prompt) && !(clarifications || []).length;
@@ -140,7 +140,7 @@ function mockGate0({ prompt, clarifications }) {
     if (id === 'H4') return vague ? 'P0' : 'P3';
     if (id === 'H8') return ops.length ? 'P0' : 'P3';
     if (id === 'H9') return inj.suspected ? 'P0' : 'P3';
-    return { H1: 'P1', H2: 'P2', H3: 'P2', H5: 'P2', H6: 'P2', H7: 'P3', H10: 'P3' }[id];
+    return { H1: 'P1', H2: 'P2', H3: 'P2', H5: 'P2', H6: 'P2', H7: 'P3', H10: 'P3' }[id] || 'P2';
   };
   const finding = {
     H1: vague ? 'Zamýšlený výsledek nelze ze zadání určit.' : `Požadovaný výsledek: ${goalStatement(type, text, 'audit')}`,
@@ -154,8 +154,9 @@ function mockGate0({ prompt, clarifications }) {
     H9: inj.suspected ? 'Zadání obsahuje pokus o změnu pravidel (prompt injection).' : 'Bez zvláštních rizik.',
     H10: 'Řešení v jednom průchodu; postup lze znovu použít pro podobná zadání.',
   };
-  const aspects = ASPECTS.map((a) => ({
-    id: a.id, finding: finding[a.id], priority: P(a.id), priorityRationale: '(simulace) priorita odvozená z typu úlohy a detektorů.',
+  // Hlediska podle zvolené H-sestavy (v0.4); katalogová HX-* dostanou obecné simulované zjištění.
+  const aspects = (setAspects || ASPECTS).map((a) => ({
+    id: a.id, finding: finding[a.id] || `(simulace) ${a.name}: zohlednit v exekuci.`, priority: P(a.id), priorityRationale: '(simulace) priorita odvozená z typu úlohy a detektorů.',
     evidence: ev ? [ev] : [], assumptions: a.id === 'H1' && !vague ? ['Uživatel očekává odpověď v češtině.'] : [],
     unknowns: vague && a.id === 'H4' ? ['Předmět úlohy'] : [],
     missingInfo: vague && a.id === 'H4' ? [{ item: 'Co přesně má být výsledkem', critical: true }] : [],

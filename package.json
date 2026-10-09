@@ -1,7 +1,7 @@
 {
   "name": "frankenstein",
-  "version": "0.3.1",
-  "description": "FRANKENSTEIN v0.3 — samostatný autonomní cyklus úlohy (Gate 0, Goal Audit, A/B/C/D, Goal Contract, Prompt Compiler, Executor, Verifier, Telemetry)",
+  "version": "0.4.0",
+  "description": "FRANKENSTEIN v0.4 — autonomní cyklus úlohy s adaptivním učením analytických hledisek (profil zadání, H-sestavy, Knowledge Base, řízené experimenty, živý průběh)",
   "private": true,
   "license": "UNLICENSED",
   "main": "src/server.js",

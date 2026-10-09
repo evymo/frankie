@@ -18,40 +18,47 @@ const goalComponents = {
   properties: { action: str, object: str, deliverable: str, qualities: strArr },
 };
 
-const aspectReport = {
-  type: 'object',
-  required: ['id', 'finding', 'priority', 'priorityRationale', 'evidence', 'assumptions', 'unknowns', 'missingInfo', 'recommendation'],
-  properties: {
-    id: { type: 'string', enum: ASPECT_IDS },
-    finding: { type: 'string', minLength: 1 },
-    priority: { type: 'string', enum: PRIORITIES },
-    priorityRationale: str,
-    evidence: strArr,
-    assumptions: strArr,
-    unknowns: strArr,
-    missingInfo: { type: 'array', items: { type: 'object', required: ['item', 'critical'], properties: { item: str, critical: { type: 'boolean' } } } },
-    recommendation: str,
-    scope: str,
-    nonGoals: strArr,
-    contradictions: strArr,
-    dependencies: strArr,
-    dataSensitivity: { type: 'string', enum: DATA_SENSITIVITY },
-  },
-};
+function aspectReportFor(ids) {
+  return {
+    type: 'object',
+    required: ['id', 'finding', 'priority', 'priorityRationale', 'evidence', 'assumptions', 'unknowns', 'missingInfo', 'recommendation'],
+    properties: {
+      id: { type: 'string', enum: ids },
+      finding: { type: 'string', minLength: 1 },
+      priority: { type: 'string', enum: PRIORITIES },
+      priorityRationale: str,
+      evidence: strArr,
+      assumptions: strArr,
+      unknowns: strArr,
+      missingInfo: { type: 'array', items: { type: 'object', required: ['item', 'critical'], properties: { item: str, critical: { type: 'boolean' } } } },
+      recommendation: str,
+      scope: str,
+      nonGoals: strArr,
+      contradictions: strArr,
+      dependencies: strArr,
+      dataSensitivity: { type: 'string', enum: DATA_SENSITIVITY },
+    },
+  };
+}
 
-const GATE0 = {
-  type: 'object',
-  required: ['taskType', 'aspects', 'h1Goal', 'requiredCapabilities', 'requestedOperations', 'toolCandidates', 'injectionSuspected'],
-  properties: {
-    taskType: { type: 'string', enum: TASK_TYPES },
-    aspects: { type: 'array', minItems: 10, maxItems: 10, items: aspectReport },
-    h1Goal: { type: 'object', required: ['statement', 'components'], properties: { statement: { type: 'string', minLength: 1 }, components: goalComponents } },
-    requiredCapabilities: strArr,
-    requestedOperations: { type: 'array', items: { type: 'object', required: ['operation', 'category'], properties: { operation: str, category: { type: 'string', enum: OPERATION_CATEGORIES } } } },
-    toolCandidates: { type: 'array', items: { type: 'object', required: ['tool', 'input', 'fullySolves'], properties: { tool: str, input: str, fullySolves: { type: 'boolean' } } } },
-    injectionSuspected: { type: 'boolean' },
-  },
-};
+/** Schéma Gate 0 pro konkrétní H-sestavu: přesně tato hlediska (počet i ID). */
+function gate0Schema(ids = ASPECT_IDS) {
+  return {
+    type: 'object',
+    required: ['taskType', 'aspects', 'h1Goal', 'requiredCapabilities', 'requestedOperations', 'toolCandidates', 'injectionSuspected'],
+    properties: {
+      taskType: { type: 'string', enum: TASK_TYPES },
+      aspects: { type: 'array', minItems: ids.length, maxItems: ids.length, items: aspectReportFor(ids) },
+      h1Goal: { type: 'object', required: ['statement', 'components'], properties: { statement: { type: 'string', minLength: 1 }, components: goalComponents } },
+      requiredCapabilities: strArr,
+      requestedOperations: { type: 'array', items: { type: 'object', required: ['operation', 'category'], properties: { operation: str, category: { type: 'string', enum: OPERATION_CATEGORIES } } } },
+      toolCandidates: { type: 'array', items: { type: 'object', required: ['tool', 'input', 'fullySolves'], properties: { tool: str, input: str, fullySolves: { type: 'boolean' } } } },
+      injectionSuspected: { type: 'boolean' },
+    },
+  };
+}
+
+const GATE0 = gate0Schema(ASPECT_IDS);
 
 const criterionProposal = {
   type: 'object',
@@ -141,4 +148,4 @@ const BASELINE = {
   properties: { output: str, artifacts: EXECUTION.properties.artifacts },
 };
 
-module.exports = { CHECK_TYPES, RELATIONS, GATE0, GOAL_AUDIT, GOAL_COMPARE, EXECUTION, SEMANTIC_VERIFY, BASELINE };
+module.exports = { CHECK_TYPES, RELATIONS, GATE0, gate0Schema, GOAL_AUDIT, GOAL_COMPARE, EXECUTION, SEMANTIC_VERIFY, BASELINE };

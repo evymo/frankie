@@ -5,6 +5,7 @@
  */
 const { sha256, canonicalJson, deepFreeze, clone, nowIso } = require('./util');
 const { systemCriteria } = require('./criteria');
+const { EVALUATOR_VERSION } = require('./evaluator');
 const { runTool, TOOLS } = require('../tools');
 
 const SCHEMA_VERSION = 'goal-contract/1.0';
@@ -67,13 +68,13 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
     ...b.criteria.map((c) => clone(c)),
     ...toolCriteria(plan),
     goalCriterion(b.statement),
-    ...systemCriteria(expectedFormat, gate0.systemFacts.blockedOperations),
+    ...systemCriteria(expectedFormat, gate0.systemFacts.blockedOperations.map((o) => ({ ...o, literalSupport: o.literalSupport !== false }))),
   ];
   // jedinečná ID kritérií
   const seen = new Set();
   for (const c of criteria) { let id = c.id; let k = 2; while (seen.has(id)) id = `${c.id}-${k++}`; c.id = id; seen.add(id); }
 
-  const blocked = gate0.systemFacts.blockedOperations.map((o) => ({ operation: o.operation, category: o.category }));
+  const blocked = gate0.systemFacts.blockedOperations.map((o) => ({ operation: o.operation, category: o.category, literalSupport: o.literalSupport !== false }));
   const unavailable = gate0.systemFacts.unavailableCapabilities;
   const constraints = uniq([
     ...(audit.constraints || []),
@@ -92,6 +93,7 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
     createdAt: nowIso(),
     status: decision.code,
     decisionRule: decision.rule,
+    evaluator: EVALUATOR_VERSION,
     role: branch.role,
     authority: branch.authority,
     statement: b.statement,

@@ -9,12 +9,12 @@ function testConfig(overrides = {}) {
   return { ...c, ...overrides, limits: { ...c.limits, ...(overrides.limits || {}) } };
 }
 
-async function runMock({ prompt, explicitGoal, baseline, script, config, parent, clarificationAnswer }) {
+async function runMock({ prompt, explicitGoal, baseline, script, config, parent, clarificationAnswer, kb, experiment, learningMode }) {
   const cfg = config || testConfig();
   const provider = new MockProvider({ script });
-  const run = createRun({ prompt, explicitGoal, provider: 'mock', baseline, parent, clarificationAnswer, config: cfg });
+  const run = createRun({ prompt, explicitGoal, provider: 'mock', baseline, parent, clarificationAnswer, config: cfg, learningMode, experiment });
   const saves = [];
-  await runPipeline({ run, provider, config: cfg, persist: (r) => saves.push(r.state) });
+  await runPipeline({ run, provider, config: cfg, persist: (r) => saves.push(r.state), kb, experiment });
   return { run, provider, saves };
 }
 

@@ -2,13 +2,30 @@
 /**
  * Prompt Compiler — deterministicky sestaví Execution Contract z validovaných struktur.
  * NIKDY nevolá AI. Nemění cíl, nedoplňuje neověřená fakta. Výstup je verzovaný a hashovaný.
+ * v0.4: eviduje stopu H-sestavy (aspectTrace) — která hlediska zvolené sestavy se skutečně propsala do promptu
+ * a která byla vynechána (P3). Tím je doložena vazba H-sestava → zjištění → Execution Contract.
  */
 const { sha256 } = require('./util');
 const { fence, DATA_RULE, JSON_RULE } = require('../templates/common');
 const { PRIORITY_LABELS } = require('./aspects');
 
-const EXECUTION_TEMPLATE = { id: 'execution-contract', version: '1.0.0' };
-const REPAIR_TEMPLATE = { id: 'execution-repair', version: '1.0.0' };
+// 1.1.0: řádek s analytickou sestavou v sekci priorit + stopa hledisek (v0.4)
+const EXECUTION_TEMPLATE = { id: 'execution-contract', version: '1.1.0' };
+const REPAIR_TEMPLATE = { id: 'execution-repair', version: '1.1.0' };
+const PRIORITY_SECTION = 'DYNAMICKÉ PRIORITY A RELEVANTNÍ ZJIŠTĚNÍ (Gate 0)';
+
+/** Stopa H-sestavy: co se z analytických reportů propsalo do Execution Contract (čistá funkce). */
+function aspectTrace(gate0) {
+  const included = gate0.aspects.filter((a) => a.finalPriority !== 'P3');
+  const order = gate0.dynamicPriorities.map((d) => d.id);
+  included.sort((x, y) => order.indexOf(x.id) - order.indexOf(y.id));
+  return {
+    aspectSet: gate0.aspectSet || { id: 'HS-default', version: 1, hash: null },
+    section: PRIORITY_SECTION,
+    included: included.map((a) => ({ id: a.id, name: a.name, kind: a.kind || null, priority: a.finalPriority })),
+    omitted: gate0.aspects.filter((a) => a.finalPriority === 'P3').map((a) => ({ id: a.id, name: a.name, kind: a.kind || null, reason: 'priorita P3 — informativní, do promptu se nepropisuje' })),
+  };
+}
 
 const SYSTEM_PROMPT = 'Jsi vykonávací agent systému FRANKENSTEIN. Plníš výhradně Execution Contract. Nemáš k dispozici žádné nástroje ani přístup k síti či souborům. ' + DATA_RULE;
 
@@ -55,10 +72,10 @@ function sections({ prompt, clarifications, contract, gate0 }) {
     'Ne-cíle:', list(contract.nonGoals),
     contract.role === 'alternative' ? 'POZOR: Toto je ALTERNATIVNÍ větev (auditní interpretace). Řeš pouze tento cíl; explicitní cíl uživatele se řeší v oddělené větvi.' : '',
   ].filter(Boolean).join('\n')]);
-  const relevant = gate0.aspects.filter((a) => a.finalPriority !== 'P3');
-  const order = gate0.dynamicPriorities.map((d) => d.id);
-  relevant.sort((x, y) => order.indexOf(x.id) - order.indexOf(y.id));
-  s.push(['DYNAMICKÉ PRIORITY A RELEVANTNÍ ZJIŠTĚNÍ (Gate 0)', relevant.map((a) =>
+  const trace = aspectTrace(gate0);
+  const relevant = trace.included.map((t) => gate0.aspects.find((a) => a.id === t.id));
+  const setLine = `Analytická sestava: ${trace.aspectSet.id}@v${trace.aspectSet.version} — hlediska ${gate0.aspects.map((a) => a.id).join(', ')}.\n`;
+  s.push([PRIORITY_SECTION, setLine + relevant.map((a) =>
     `[${a.finalPriority}] ${a.id} ${a.name}: ${a.finding}\n   → doporučení: ${a.recommendation || '—'}`).join('\n')
     + `\n(Legenda: P0 ${PRIORITY_LABELS.P0}; P1 ${PRIORITY_LABELS.P1}; P2 ${PRIORITY_LABELS.P2}. Hlediska s P3 vynechána.)`]);
   s.push(['POVINNÁ OMEZENÍ', list(contract.constraints)]);
@@ -94,7 +111,7 @@ function render(template, secs) {
 function compileExecution({ prompt, clarifications, contract, gate0 }) {
   const secs = sections({ prompt, clarifications, contract, gate0 });
   const text = render(EXECUTION_TEMPLATE, secs);
-  return { template: EXECUTION_TEMPLATE, system: SYSTEM_PROMPT, contractId: contract.id, contractVersion: contract.version, contractHash: contract.contentHash, sectionTitles: secs.map((x) => x[0]), text, sha256: sha256(SYSTEM_PROMPT + '\n' + text), chars: text.length, usedAI: false };
+  return { template: EXECUTION_TEMPLATE, system: SYSTEM_PROMPT, contractId: contract.id, contractVersion: contract.version, contractHash: contract.contentHash, aspectTrace: aspectTrace(gate0), sectionTitles: secs.map((x) => x[0]), text, sha256: sha256(SYSTEM_PROMPT + '\n' + text), chars: text.length, usedAI: false };
 }
 
 /** Opravný prompt: stejný kontrakt + konkrétní nesplněná kritéria a předchozí výstup (jako data). */
@@ -106,7 +123,7 @@ function compileRepair({ prompt, clarifications, contract, gate0, previous, fail
       + '\nOprav výsledek tak, aby tato kritéria splnil. Nesplněná kritéria neobcházej změnou cíle.'],
     ['PŘEDCHOZÍ VÝSTUP (data k opravě)', fence('PREDCHOZI_VYSTUP', previous.output) + ((previous.artifacts || []).length ? '\n' + previous.artifacts.map((a) => `Artefakt ${a.name}:\n${fence('PREDCHOZI_ARTEFAKT', a.content)}`).join('\n') : '')]);
   const text = render(REPAIR_TEMPLATE, secs);
-  return { template: REPAIR_TEMPLATE, system: SYSTEM_PROMPT, contractId: contract.id, contractVersion: contract.version, contractHash: contract.contentHash, sectionTitles: secs.map((x) => x[0]), text, sha256: sha256(SYSTEM_PROMPT + '\n' + text), chars: text.length, usedAI: false };
+  return { template: REPAIR_TEMPLATE, system: SYSTEM_PROMPT, contractId: contract.id, contractVersion: contract.version, contractHash: contract.contentHash, aspectTrace: aspectTrace(gate0), sectionTitles: secs.map((x) => x[0]), text, sha256: sha256(SYSTEM_PROMPT + '\n' + text), chars: text.length, usedAI: false };
 }
 
-module.exports = { compileExecution, compileRepair, EXECUTION_TEMPLATE, REPAIR_TEMPLATE, SYSTEM_PROMPT };
+module.exports = { compileExecution, compileRepair, aspectTrace, EXECUTION_TEMPLATE, REPAIR_TEMPLATE, SYSTEM_PROMPT };
