@@ -54,7 +54,8 @@ function runFunctionTests({ code, functionName, cases, timeoutMs = 5000 }) {
     const sc = staticCheck(code);
     if (!sc.ok) return resolve({ executed: false, reason: sc.reason });
     if (!/^[A-Za-z_$][\w$]*$/.test(String(functionName || ''))) return resolve({ executed: false, reason: 'Neplatný název funkce' });
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-sandbox-'));
+    // realpath: na macOS je tmpdir symlink (/var → /private/var) a --allow-fs-read porovnává skutečné cesty.
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fr-sandbox-')));
     const file = path.join(dir, `h-${crypto.randomBytes(4).toString('hex')}.js`);
     fs.writeFileSync(file, harnessSource(code, functionName, cases), 'utf8');
     const started = Date.now();

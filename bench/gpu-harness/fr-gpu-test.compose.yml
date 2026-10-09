@@ -1,0 +1,86 @@
+# fr-gpu-test — jednorázový integrační test FR × vlastní modely (Donkey), 2026-10-09.
+# Schváleno: majitel („pojď na donkey… změny přes coolify“), Guru (podmínky v tabuli KONVERGENCE).
+# Žádné publikované porty; vlastní síť; žádná síť accel/lane/jádro; žádné svazky operátora; žádný HF token (modely veřejné).
+# VRAM: 2 × 0,35 × 97 887 MiB + embed-1/2 (5 189 MiB změřeno 03:00Z) = 75,3 %. Judge startuje až po zdravém exec.
+services:
+  vllm-exec:
+    image: vllm/vllm-openai@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90
+    command:
+      - --model
+      - nvidia/Qwen3.8-27B-NVFP4
+      - --revision
+      - 482ca0f3832238542f8f5295dde86b5f22711d80
+      - --served-model-name
+      - fr-exec
+      - --gpu-memory-utilization
+      - "0.35"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "4"
+      - --port
+      - "8000"
+    environment:
+      VLLM_API_KEY: ${VLLM_API_KEY}
+    volumes:
+      - fr-gpu-test-hf:/root/.cache/huggingface
+    shm_size: 8gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 60
+      start_period: 900s
+    networks:
+      - fr-test
+  vllm-judge:
+    image: vllm/vllm-openai@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90
+    command:
+      - --model
+      - nvidia/Qwen3.6-35B-A3B-NVFP4
+      - --revision
+      - 1355db6a052410cfd62085d94b58866fd0f2c3c5
+      - --served-model-name
+      - fr-judge
+      - --gpu-memory-utilization
+      - "0.35"
+      - --max-model-len
+      - "16384"
+      - --max-num-seqs
+      - "4"
+      - --port
+      - "8000"
+    environment:
+      VLLM_API_KEY: ${VLLM_API_KEY}
+    volumes:
+      - fr-gpu-test-hf:/root/.cache/huggingface
+    shm_size: 8gb
+    depends_on:
+      vllm-exec:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 60
+      start_period: 900s
+    networks:
+      - fr-test
+networks:
+  fr-test: {}
+volumes:
+  fr-gpu-test-hf: {}

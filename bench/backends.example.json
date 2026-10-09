@@ -1,0 +1,33 @@
+[
+  { "id": "mock", "type": "mock" },
+
+  { "id": "sonnet-cli", "type": "claude-cli" },
+
+  {
+    "id": "gpu-qwen",
+    "type": "openai-compatible",
+    "baseUrl": "http://fr-vllm-exec:8000/v1",
+    "apiKeyEnv": "FR_GPU_API_KEY",
+    "model": "nvidia/Qwen3.8-27B-NVFP4",
+    "judgeBaseUrl": "http://fr-vllm-judge:8000/v1",
+    "judgeModel": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+    "extraBody": { "chat_template_kwargs": { "enable_thinking": false } },
+    "maxTokens": 6000
+  },
+
+  {
+    "id": "local-ollama",
+    "type": "openai-compatible",
+    "baseUrl": "http://127.0.0.1:11434/v1",
+    "model": "qwen3:8b",
+    "maxTokens": 6000
+  },
+
+  {
+    "id": "local-weak",
+    "type": "openai-compatible",
+    "baseUrl": "http://127.0.0.1:12434/engines/v1",
+    "model": "docker.io/ai/smollm2:latest",
+    "maxTokens": 2000
+  }
+]
