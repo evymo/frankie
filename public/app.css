@@ -15,6 +15,9 @@
   --p0: #b33a3a; --p1: #c46a17; --p2: #8a7a1d; --p3: #6b716c;
   --sim: #7a4fa0; --sim-bg: #efe6f7;
   --code-bg: #f3f2ee;
+  /* Hlavní odpověď FR (v0.4): modrá — odlišení od analytických reportů. Kontrast textu ≥ 4.5:1. */
+  --answer: #1d4f9e; --answer-border: #2f6fd1; --answer-bg: #edf3fc; --answer-text-bg: #ffffff; --answer-soft: #d7e5fa;
+  --run: #2f6fd1;
   --shadow: 0 1px 2px rgba(20, 30, 20, .06), 0 2px 8px rgba(20, 30, 20, .04);
   --radius: 10px;
   --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
@@ -27,6 +30,7 @@
     --pass: #6fcf8f; --pass-bg: #1d3325; --fail: #ef8a84; --fail-bg: #3a2222; --partial: #e6b15c; --partial-bg: #3a2f1a;
     --unver: #a9aee6; --unver-bg: #262a40; --p0: #ef8a84; --p1: #eda05a; --p2: #d6c56a; --p3: #98a19a;
     --sim: #c9a2ea; --sim-bg: #33263f; --code-bg: #171a18; --shadow: none;
+    --answer: #9cc2ff; --answer-border: #4f8fef; --answer-bg: #15213a; --answer-text-bg: #0f1828; --answer-soft: #1f3354; --run: #79a9f5;
   }
 }
 :root[data-theme="dark"] {
@@ -35,6 +39,7 @@
   --pass: #6fcf8f; --pass-bg: #1d3325; --fail: #ef8a84; --fail-bg: #3a2222; --partial: #e6b15c; --partial-bg: #3a2f1a;
   --unver: #a9aee6; --unver-bg: #262a40; --p0: #ef8a84; --p1: #eda05a; --p2: #d6c56a; --p3: #98a19a;
   --sim: #c9a2ea; --sim-bg: #33263f; --code-bg: #171a18; --shadow: none;
+  --answer: #9cc2ff; --answer-border: #4f8fef; --answer-bg: #15213a; --answer-text-bg: #0f1828; --answer-soft: #1f3354; --run: #79a9f5;
 }
 
 * { box-sizing: border-box; }
@@ -179,17 +184,70 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .mt { margin-top: .6rem; }
 .my { margin: .4rem 0; }
 pre.answer { font-family: var(--sans); font-size: 14px; max-height: none; background: var(--surface-2); }
-.answer-card { border: 2px solid var(--accent); background: var(--surface); padding: 1.25rem 1.4rem; }
-.answer-card.sim { border-color: var(--sim); }
-.answer-card.fail { border-color: var(--fail); }
-.answer-card.pending { border-style: dashed; }
+.answer-card { border: 2px solid var(--answer-border); border-left-width: 7px; background: var(--answer-bg); padding: 1.25rem 1.4rem; }
+.answer-card.pending { border-style: dashed; border-left-style: solid; }
+.answer-card.fail { box-shadow: inset 0 3px 0 var(--fail); }
+.answer-card.sim { box-shadow: inset 0 3px 0 var(--sim); }
+.answer-kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--answer); margin-bottom: .15rem; }
 .answer-title { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-.answer-title h2 { font-size: 1.35rem; margin: 0; }
+.answer-title h2 { font-size: 1.35rem; margin: 0; color: var(--answer); }
+.answer-card .note { background: var(--answer-text-bg); border-radius: 0 6px 6px 0; }
+.answer-now { display: flex; align-items: center; gap: .5rem; margin: .4rem 0; font-size: 14px; }
 .answer-q { margin: .35rem 0 .6rem; font-size: 13px; }
 .answer-branch { margin-top: .9rem; }
 .answer-branch + .answer-branch { border-top: 1px dashed var(--border); padding-top: .9rem; }
 .answer-meta { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; font-size: 13px; }
-.answer-text { font-size: 16px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1rem; }
+.answer-text { font-size: 16px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; background: var(--answer-text-bg); border: 1px solid var(--answer-soft); border-radius: 8px; padding: .9rem 1rem; }
+.answer-branch + .answer-branch { border-top-color: var(--answer-soft); }
 .artifact { margin-top: .7rem; }
 .artifact-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
 .artifact-head h4 { margin: 0; }
+
+/* ---------- v0.4: živý provozní průběh ---------- */
+.progress-card .phases { margin-bottom: .6rem; }
+.now { display: flex; align-items: center; gap: .55rem; padding: .5rem .7rem; border: 1px solid var(--border); border-left: 4px solid var(--run); border-radius: 8px; background: var(--surface-2); margin-bottom: .6rem; font-size: 13.5px; }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ev { display: grid; grid-template-columns: 22px 66px minmax(0, 1fr) auto; gap: .2rem .55rem; align-items: start; padding: .32rem 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.ev:last-child { border-bottom: 0; }
+.ev.sub { padding-left: 1.1rem; grid-template-columns: 22px 66px minmax(0, 1fr) auto; }
+.ev .ic { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 1px; border: 2px solid var(--border); color: var(--muted); background: var(--surface); }
+.ev .t { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.ev .lbl { font-weight: 600; }
+.ev .det { color: var(--muted); font-size: 12.5px; word-break: break-word; }
+.ev .meta { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.ev.st-done .ic { background: var(--pass); border-color: var(--pass); color: var(--surface); }
+.ev.st-running .ic { border-color: var(--run); color: var(--run); animation: pulse-run 1.1s ease-in-out infinite; }
+.ev.st-running .lbl { color: var(--run); }
+.ev.st-skipped .ic { border-style: dashed; }
+.ev.st-skipped .lbl { color: var(--muted); font-weight: 500; }
+.ev.st-blocked .ic, .ev.st-stopped .ic { background: var(--partial); border-color: var(--partial); color: var(--surface); }
+.ev.st-failed .ic { background: var(--fail); border-color: var(--fail); color: var(--surface); }
+.ev.st-info .ic { background: var(--unver-bg); border-color: var(--unver); color: var(--unver); }
+.ev.kind-call .lbl { font-weight: 500; }
+@keyframes pulse-run { 50% { box-shadow: 0 0 0 4px var(--answer-soft); } }
+@media (prefers-reduced-motion: reduce) { .ev.st-running .ic { animation: none; } }
+@media (max-width: 640px) {
+  .ev, .ev.sub { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .ev .t { display: none; }
+  .ev.sub { padding-left: .5rem; }
+}
+
+/* ---------- v0.4: učení a H-sestavy ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.chip { display: inline-flex; align-items: center; gap: .25rem; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: .1rem .55rem; font-size: 12px; }
+.chip.core { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip.new { border-color: var(--run); color: var(--run); font-weight: 600; }
+.chip.off { text-decoration: line-through; color: var(--muted); }
+.b-st-verified { color: var(--pass); background: var(--pass-bg); }
+.b-st-supported { color: var(--unver); background: var(--unver-bg); }
+.b-st-candidate { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.b-st-contested { color: var(--partial); background: var(--partial-bg); }
+.b-st-refuted { color: var(--fail); background: var(--fail-bg); }
+.b-mode-applied { color: var(--pass); background: var(--pass-bg); }
+.b-mode-experiment { color: var(--run); background: var(--answer-soft); }
+.b-mode-default { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.hyp { border: 1px solid var(--border); border-left: 4px solid var(--run); border-radius: 8px; padding: .6rem .75rem; margin: .45rem 0; background: var(--surface); }
+.hyp .actions { margin-top: .45rem; }
+.kb-side .kb-counts { display: flex; gap: .4rem; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: .2rem 0 .5rem; }
+.kb-side button { width: 100%; }
+.confirm-box { display: flex; gap: .5rem; align-items: flex-start; margin: .6rem 0; font-size: 13px; }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FRANKENSTEIN v0.3.1</title>
+  <title>FRANKENSTEIN v0.4.0</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233d5a3f'/%3E%3Cpath d='M9 8h14v4H13v3h8v4h-8v5H9z' fill='%23e9f1e4'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="app.css">
 </head>
@@ -12,8 +12,8 @@
     <div class="brand">
       <span class="logo" aria-hidden="true">F</span>
       <div>
-        <div class="brand-name">FRANKENSTEIN <span class="ver">v0.3.1</span></div>
-        <div class="brand-sub">Samostatný autonomní cyklus úlohy</div>
+        <div class="brand-name">FRANKENSTEIN <span class="ver">v0.4.0</span></div>
+        <div class="brand-sub">Autonomní cyklus úlohy · adaptivní učení analytických hledisek</div>
       </div>
     </div>
     <div class="top-actions">
@@ -38,6 +38,9 @@
             <input id="baseline" type="checkbox"> BASELINE vs. FR
           </label>
         </div>
+        <label class="check" title="Nepřebírat zkušenosti z Knowledge Base; použít bezpečnou výchozí sestavu H1–H10. Diagnóza a kandidáti se i tak uloží.">
+          <input id="defaultSet" type="checkbox"> Výchozí H-sestava (nepřebírat zkušenosti)
+        </label>
         <button id="runBtn" class="primary" type="submit">Spustit cyklus</button>
         <p id="formMsg" class="form-msg" role="status"></p>
         <details class="examples">
@@ -45,6 +48,12 @@
           <div id="examples"></div>
         </details>
       </form>
+
+      <section class="card kb-side">
+        <div class="history-head"><h2>Znalostní báze</h2><span class="muted">lokální</span></div>
+        <div id="kbCounts" class="kb-counts">Načítám…</div>
+        <button id="kbOpen" type="button">Zkušenosti a H-sestavy</button>
+      </section>
 
       <section class="card history">
         <div class="history-head">
@@ -58,7 +67,7 @@
     <main id="main" class="main">
       <div class="empty">
         <h1>Zadejte prompt a spusťte cyklus</h1>
-        <p>FR projde deset hledisek, nezávisle audituje cíl, rozhodne A/B/C/D, vytvoří Goal Contract, algoritmicky sestaví exekuční prompt, převezme výsledek, ověří ho proti kritériím a ukáže kompletní telemetrii.</p>
+        <p>FR určí charakteristiku zadání a podle doložených zkušeností zvolí analytickou sestavu hledisek, nezávisle audituje cíl, rozhodne A/B/C/D, vytvoří Goal Contract, algoritmicky sestaví exekuční prompt, převezme výsledek, ověří ho proti kritériím, diagnostikuje odchylky a uloží zkušenost. Průběh práce uvidíte živě.</p>
       </div>
     </main>
   </div>
@@ -70,6 +79,26 @@
       <div class="dialog-actions">
         <button id="pfRerun" type="button">Znovu ověřit (bez inference)</button>
         <button value="close" class="primary">Zavřít</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="kbDialog" class="dialog">
+    <form method="dialog">
+      <h2>Znalostní báze — zkušenosti s H-sestavami</h2>
+      <div id="kbBody"></div>
+      <div class="dialog-actions"><button value="close" class="primary">Zavřít</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="expDialog" class="dialog">
+    <form method="dialog">
+      <h2>Řízený experiment H-sestavy</h2>
+      <div id="expBody"></div>
+      <p id="expMsg" class="form-msg" role="status"></p>
+      <div class="dialog-actions">
+        <button value="close">Zrušit</button>
+        <button id="expGo" type="button" class="primary">Spustit experiment</button>
       </div>
     </form>
   </dialog>
