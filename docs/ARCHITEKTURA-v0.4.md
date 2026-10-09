@@ -147,6 +147,13 @@ Z neúspěchu se nikdy neusuzuje, že všechna H byla špatná: hypotéza navrhu
 - Pořadí: **Hlavní odpověď** (modrá) → **Průběh práce** (fáze + „Právě: …“ + časová osa) → hlavička běhu → verdikty →
   Učení a analytická sestava → Gate 0 → … → telemetrie. Panel „Znalostní báze“ v postranním sloupci + dialog.
 
+**Přepínač zobrazení** (horní lišta, kdykoli i během běhu, volba se pamatuje v prohlížeči):
+- **Provozní** — uživatelský pohled jako u běžného agenta: zadání jako zpráva, stručné kroky („Analyzuji zadání“,
+  „Vytvářím odpověď…“; po dokončení sbalené „Postup · N kroků · čas“) a modrá odpověď se srozumitelným stavem
+  (Ověřeno / Splněno částečně / …) a výčtem nesplněných požadavků. Bez vnitřních detailů (hashe, priority, kontrakty,
+  H-sestavy, telemetrie, KB, pokročilé volby). Kroky se odvozují ze stejných událostí `run.events`.
+- **Detailní** — kompletní vnitřní průběh FR (výše).
+
 Barevné tokeny hlavní odpovědi: `--answer, --answer-border, --answer-bg, --answer-text-bg, --answer-soft` (světlý
 i tmavý režim); PASS/PARTIAL/FAIL, simulace a blokace si ponechávají vlastní barvy (simulace a selhání jako horní proužek
 a štítek, ne přebarvením rámu).

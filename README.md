@@ -73,6 +73,11 @@ Stavový automat: `RECEIVED → PROFILE → GATE0 → GOAL_AUDIT → GOAL_COMPAR
 [COMPILE → EXECUTE → VERIFY → (REPAIR → VERIFY)] × větve → (BASELINE) → REPORT → LEARN → DONE)`.
 Řízený experiment H-sestavy: `RECEIVED → PROFILE → GATE0 → CONTRACTS (zamčený z původního běhu) → … → LEARN → DONE`.
 
+## Zobrazení
+
+Přepínač **Provozní / Detailní** v horní liště: provozní = jen zadání, stručný postup a odpověď (jako běžný agent),
+detailní = celý vnitřní průběh FR (hlediska, kontrakty, verifikace, učení, telemetrie). Přepnout lze kdykoli.
+
 ## Učení (v0.4) — provoz
 
 - Knowledge Base je **sdílená v repozitáři** v [`knowledge/`](knowledge/README.md) (jeden soubor na záznam, týmová práce

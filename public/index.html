@@ -17,6 +17,10 @@
       </div>
     </div>
     <div class="top-actions">
+      <div class="view-toggle" role="group" aria-label="Zobrazení" title="Provozní = jen prompt, stručný postup a odpověď. Detailní = celý vnitřní průběh FR.">
+        <button type="button" data-view="ops" aria-pressed="false">Provozní</button>
+        <button type="button" data-view="detail" aria-pressed="true">Detailní</button>
+      </div>
       <button id="providerPill" class="pill" type="button" title="Stav providerů a preflight fakturace">Načítám stav…</button>
     </div>
   </header>
@@ -25,23 +29,25 @@
     <aside class="sidebar">
       <form id="runForm" class="card form" autocomplete="off">
         <h2>Nové zadání</h2>
-        <label for="prompt">Původní prompt</label>
+        <label for="prompt"><span class="adv-only">Původní prompt</span><span class="ops-only">Zadání</span></label>
         <textarea id="prompt" rows="8" required placeholder="Např.: Vypočítej (17*23+5)/2"></textarea>
-        <label for="explicitGoal">Explicitní cíl <span class="muted">(volitelné)</span></label>
-        <input id="explicitGoal" type="text" placeholder="Např.: Shrnutí do 3 bodů v angličtině">
+        <div class="adv-only">
+          <label for="explicitGoal">Explicitní cíl <span class="muted">(volitelné)</span></label>
+          <input id="explicitGoal" type="text" placeholder="Např.: Shrnutí do 3 bodů v angličtině">
+        </div>
         <div class="row">
           <div class="field">
             <label for="provider">Provider</label>
             <select id="provider"></select>
           </div>
-          <label class="check" title="Experimentální režim: přímé řešení modelem navíc k FR cyklu (stojí další volání).">
+          <label class="check adv-only" title="Experimentální režim: přímé řešení modelem navíc k FR cyklu (stojí další volání).">
             <input id="baseline" type="checkbox"> BASELINE vs. FR
           </label>
         </div>
-        <label class="check" title="Nepřebírat zkušenosti z Knowledge Base; použít bezpečnou výchozí sestavu H1–H10. Diagnóza a kandidáti se i tak uloží.">
+        <label class="check adv-only" title="Nepřebírat zkušenosti z Knowledge Base; použít bezpečnou výchozí sestavu H1–H10. Diagnóza a kandidáti se i tak uloží.">
           <input id="defaultSet" type="checkbox"> Výchozí H-sestava (nepřebírat zkušenosti)
         </label>
-        <button id="runBtn" class="primary" type="submit">Spustit cyklus</button>
+        <button id="runBtn" class="primary" type="submit">Spustit</button>
         <p id="formMsg" class="form-msg" role="status"></p>
         <details class="examples">
           <summary>Ukázková zadání</summary>
@@ -49,7 +55,7 @@
         </details>
       </form>
 
-      <section class="card kb-side">
+      <section class="card kb-side adv-only">
         <div class="history-head"><h2>Znalostní báze</h2><span class="muted">sdílená · Git</span></div>
         <div id="kbCounts" class="kb-counts">Načítám…</div>
         <button id="kbOpen" type="button">Zkušenosti a H-sestavy</button>
@@ -58,7 +64,7 @@
       <section class="card history">
         <div class="history-head">
           <h2>Historie běhů</h2>
-          <label class="linklike" title="Otevřít dříve exportovaný JSON bez inference">Import JSON<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+          <label class="linklike adv-only" title="Otevřít dříve exportovaný JSON bez inference">Import JSON<input id="importFile" type="file" accept="application/json,.json" hidden></label>
         </div>
         <ul id="history" class="history-list"></ul>
       </section>
