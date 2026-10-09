@@ -22,6 +22,13 @@ function tokenize(src) {
 }
 
 function evaluate(src) {
+  return evaluateWithSteps(src).value;
+}
+
+/** Vyhodnotí výraz a vrátí i mezivýsledky všech operací (veto nástroje v kontraktu: povolená čísla). */
+function evaluateWithSteps(src) {
+  const steps = [];
+  const rec = (v) => { steps.push(Math.round(v * 1e12) / 1e12); return v; };
   const tokens = tokenize(src);
   let pos = 0;
   const peek = () => tokens[pos];
@@ -36,7 +43,7 @@ function evaluate(src) {
     while (peek() && (peek().v === '+' || peek().v === '-')) {
       const op = eat().v;
       const r = term();
-      v = op === '+' ? v + r : v - r;
+      v = rec(op === '+' ? v + r : v - r);
     }
     return v;
   }
@@ -46,17 +53,17 @@ function evaluate(src) {
       const op = eat().v;
       const r = power();
       if (op === '/' && r === 0) throw new Error('Dělení nulou');
-      v = op === '*' ? v * r : v / r;
+      v = rec(op === '*' ? v * r : v / r);
     }
     return v;
   }
   function power() {
     const b = unary();
-    if (peek() && peek().v === '^') { eat('^'); return Math.pow(b, power()); }
+    if (peek() && peek().v === '^') { eat('^'); return rec(Math.pow(b, power())); }
     return b;
   }
   function unary() {
-    if (peek() && peek().v === '-') { eat('-'); return -unary(); }
+    if (peek() && peek().v === '-') { eat('-'); return rec(-unary()); }
     if (peek() && peek().v === '+') { eat('+'); return unary(); }
     return primary();
   }
@@ -68,7 +75,7 @@ function evaluate(src) {
       pos++; eat('(');
       const v = expr();
       eat(')');
-      return tk.v === 'sqrt' ? Math.sqrt(v) : tk.v === 'abs' ? Math.abs(v) : Math.round(v);
+      return rec(tk.v === 'sqrt' ? Math.sqrt(v) : tk.v === 'abs' ? Math.abs(v) : Math.round(v));
     }
     if (tk.v === '(') { eat('('); const v = expr(); eat(')'); return v; }
     throw new Error(`Neočekávaný token „${tk.v}“`);
@@ -77,7 +84,7 @@ function evaluate(src) {
   const v = expr();
   if (pos !== tokens.length) throw new Error('Nadbytečné znaky ve výrazu');
   if (!Number.isFinite(v)) throw new Error('Výsledek není konečné číslo');
-  return Math.round(v * 1e12) / 1e12;
+  return { value: Math.round(v * 1e12) / 1e12, steps };
 }
 
 /** Najde v textu nejdelší kandidát na aritmetický výraz (pro mock a nástrojový plán). */
@@ -93,4 +100,4 @@ function findExpression(text) {
   return best;
 }
 
-module.exports = { evaluate, findExpression };
+module.exports = { evaluate, evaluateWithSteps, findExpression };

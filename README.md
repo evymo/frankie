@@ -273,22 +273,31 @@ inference. Jádro podle backendu nevětví.
 
   Nástroj ale zatím nemá veto. Když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
 - **Hodnotitel 1.3.0 (v0.4.3, nález 7 z benchmarku):**
-  - **Veto nástroje při vzniku kontraktu.** Když kritérium navržené modelem nese hodnotu výsledku v rozporu
-    s nástrojem (např. „obsahuje správný výsledek 201“ × `arith_eval` 198), do kontraktu se nedostane. Nahradí ho
-    kontrola hodnoty nástroje a rozpor se zapíše jako nález kontraktu (`contract.findings`, `report.contractFindings`,
-    stav `proposed`). Oprava tak nikdy nedostane pokyn splnit kontaminované kritérium. Na v0.4.2 tímhle FR zkazil
-    správnou odpověď 198 → 201.
-  - **`number_equals` bere ohlášený výsledek** („výsledek / odpověď / celkem / správně je …“) před posledním číslem,
-    takže „je 201 … i když výpočet dává 198“ je FAIL. Výklad je jeden, v `src/core/numbers.js`, a sdílí ho i orákl
-    benchmarku.
-  - **Diagnóza:** rozpor kontraktu s nástrojem je příčina „kontrakt / verifikace“, sadě hledisek se nepřipisuje a
-    z takového běhu nevzniká hypotéza, ani redukce.
+  - **Veto nástroje při vzniku kontraktu, bez klíčových slov.** U `arith_eval` jsou povolená čísla: výsledek
+    nástroje, mezivýsledky výrazu (17·23 = 391, 391 + 5 = 396, 396 / 2 = 198) a čísla doslovně v zadání. Jiné číslo,
+    které model vloží do kontraktu, je rozpor, ať je formulované jakkoli a v jakémkoli jazyce:
+    - kritéria `number_equals`, `contains`, `regex` a sémantická (i s neutrálním popisem) se nahradí kontrolou
+      hodnoty nástroje; `not_contains`, které by zakazovalo výsledek nástroje, taky;
+    - cíl, složky cíle, popis výstupu a rozsah se přepíšou na hodnotu nástroje;
+    - položky omezení, předpokladů a ne-cílů s cizím číslem se vyřadí (přepis „max 5 vět“ na „max 198 vět“ by byl
+      nesmysl);
+    - zjištění hledisek z Gate 0, která jdou do Execution Contract, se přepíšou stejně.
+
+    Každý rozpor se zapíše jako nález kontraktu (`contract.findings`, `report.contractFindings`, stav `proposed`).
+    Oprava tak nikdy nedostane pokyn splnit kontaminované kritérium. Na v0.4.2 tímhle FR zkazil správnou odpověď
+    198 → 201. Výjimky: typy kontrol, kde je číslo limitem (`max_words`, `min_words`, JSON, testy kódu …). Mez: číslo,
+    které model vymyslí jako počet („ve 3 krocích“) a které v zadání není, se bere jako rozpor.
+  - **`number_equals` bere ohlášený výsledek** v pořadí: silné ohlášení („výsledek / odpověď / správně je /
+    zaplatíte / výsledkem je“) → jinak poslední z „celkem N“ a „= N“ → jinak poslední číslo. „je 201 … i když výpočet
+    dává 198“ je FAIL. „s výsledkem 391 pokračujeme … = 198“ a „celkem 396, vyděleno dvěma = 198“ jsou PASS. Výklad je
+    jeden, v `src/core/numbers.js`, a sdílí ho i orákl benchmarku.
+  - **Diagnóza:** rozpor se hledá ve všech kritériích kontraktu, i ve splněných. Kontraktu nebo verifikaci se připíšou
+    jen související selhání (číselná, sémantická, kontroly nástroje), SYS-4 apod. si ponechají vlastní příčinu.
+    Z takového běhu nevzniká hypotéza, ani redukce.
   - Veto nad celkovým verdiktem to není: selhaná kontrola nástroje při ostatních splněných kritériích dál dává
     `PARTIAL`.
 - **Úplnost u filtrovaného CSV není hlídaná:** odpověď, které chybí řádek splňující filtr (např. chybí Cyril), projde
   kontrolou nástroje. Řešení (kritérium s cestou, typované kontroly) je naplánované do M-FR1.
-- Číselná kontrola (`number_equals`) bere **poslední číslo** výstupu. Odpověď, která uvede výsledek před postupem,
-  proto může neprojít i se správným výsledkem.
 
 ## Dokumentace
 

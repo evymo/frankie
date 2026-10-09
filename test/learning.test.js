@@ -441,3 +441,22 @@ test('Diagnóza (hodnotitel 1.3.0, nález 7): reálné selhání při rozporu ko
   const clean = runOf(contract([]), rows);
   assert.equal(diagnoseBranch({ run: clean, branch: clean.branches[0] }).hFeedback, true);
 });
+
+test('Diagnóza (1.3.0): rozpor i ve SPLNĚNÉM kritériu (běh ve tvaru 0.4.2 bez nálezu) → bez HX-EDGE; SYS-4 se nepřejmenuje', () => {
+  const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
+  const contract = { id: 'GC-L', toolPlan: { tool: 'arith_eval', input: '(17*23+5)/2', value: 198, fullySolves: false }, findings: [], blockedOperations: [{ operation: 'odeslat e-mail', category: 'external_communication', literalSupport: true }], unavailableCapabilities: [],
+    successCriteria: [
+      { id: 'AC-1', mandatory: true, origin: 'audit_model', description: 'Výstup obsahuje číslo 201.', verification: { type: 'contains', params: { text: '201' } } },
+      { id: 'TOOL-1', mandatory: true, origin: 'deterministic_tool', verification: { type: 'number_equals', params: { expected: 198 } } },
+      { id: 'SYS-4', mandatory: true, origin: 'system', verification: { type: 'blocked_scope', params: {} } }] };
+  const run = { input: { prompt: 'Vypočítej (17*23+5)/2 a vysvětli postup.' }, provider: { simulated: false }, gate0: { aspects: [] }, contracts: [contract],
+    branches: [{ id: 'B1', contractId: 'GC-L', attempts: [{ execution: { status: 'completed', output: 'Výsledek je 201.' }, verification: { verdict: 'PARTIAL', criteria: [
+      { criterionId: 'AC-1', mandatory: true, result: 'PASS' }, { criterionId: 'TOOL-1', mandatory: true, result: 'FAIL' }, { criterionId: 'SYS-4', mandatory: true, result: 'FAIL' }] } }] }] };
+  const d = diagnoseBranch({ run, branch: run.branches[0] });
+  assert.equal(d.contractConflict, true, 'AC-1 (PASS) nese 201 — rozpor se hledá ve všech kritériích');
+  assert.equal(d.items.find((i) => i.criterionId === 'TOOL-1').cause, 'contract_tool_conflict');
+  assert.notEqual(d.items.find((i) => i.criterionId === 'SYS-4').cause, 'contract_tool_conflict', 'nesouvisející selhání si nechá vlastní příčinu');
+  assert.equal(d.hFeedback, false);
+  const hyp = proposeHypotheses({ diagnoses: [d], profile: { features: { kind: 'math', artifact: 'number', constraints: [], language: 'cs', verifiability: 'deterministic' } }, aspectSet: { id: 'HS-default', version: 1, aspects: [], floors: {} }, gate0: null, runId: 'RUN-L', simulated: false });
+  assert.deepEqual(hyp, [], 'žádné HX-EDGE z kontaminovaného kontraktu');
+});

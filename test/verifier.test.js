@@ -152,3 +152,12 @@ test('number_equals (hodnotitel 1.3.0): ohlášený výsledek před posledním �
   assert.equal(await r('Celkem = 12 450,50 Kč', 12450.5), 'PASS', 'tisíce mezerou');
   assert.equal(await r('Bez čísla.'), 'FAIL');
 });
+
+test('number_equals (1.3.0, re-revize): „výsledkem“ bez spony a „celkem“ před pozdějším „=“ nejsou ohlášení; znak mínus U+2212', async () => {
+  const r = async (output, expected = 198) => (await runDeterministic(crit('number_equals', { expected, tolerance: 1e-6 }), { output }, ctx)).result;
+  assert.equal(await r('s výsledkem 391 pokračujeme a dělíme dvěma = 198'), 'PASS');
+  assert.equal(await r('celkem 396, vyděleno dvěma = 198'), 'PASS');
+  assert.equal(await r('Výsledkem je 198.'), 'PASS', '„Výsledkem je“ se sponou ohlášení je');
+  assert.equal(await r('Výsledek je −198.', -198), 'PASS');
+  assert.equal(await r('Výsledek je −198.', 198), 'FAIL', 'znaménko se neztratí');
+});
