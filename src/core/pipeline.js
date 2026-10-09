@@ -402,7 +402,8 @@ function stageReport(ctx) {
     simulated: ctx.provider.simulated,
     realityNote: ctx.provider.simulated
       ? 'SIMULACE: odpovědi modelu generoval deterministický mock provider. Algoritmické části (stavový automat, rozhodnutí, kompilace promptu, deterministické nástroje a kontroly, sandbox testy kódu) proběhly reálně.'
-      : 'Reálná inference přes Claude Code CLI (předplatné ověřené preflightem).',
+      // Text dodává provider (bez větvení podle backendu v jádru, K9); obecná výchozí hodnota jen id + model.
+      : (ctx.provider.describe().note || `Reálná inference: ${ctx.provider.id} (${ctx.provider.model}).`),
   };
 }
 

@@ -88,7 +88,7 @@ async function loadStatus() {
   const pf = s.preflight;
   for (const p of s.providers) {
     const blocked = p.id === 'claude-cli' && !(pf && pf.ok);
-    const label = p.id === 'mock' ? 'Mock (simulace, bez inference)' : `Claude CLI — ${p.model}${blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : ''}`;
+    const label = p.label ? p.label : p.id === 'mock' ? 'Mock (simulace, bez inference)' : `Claude CLI — ${p.model}${blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : ''}`;
     sel.append(h('option', { value: p.id, disabled: blocked }, label));
   }
   sel.value = prev && !sel.querySelector(`option[value="${prev}"]`).disabled ? prev : s.defaultProvider;

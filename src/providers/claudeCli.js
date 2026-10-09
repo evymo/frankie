@@ -77,7 +77,7 @@ class ClaudeCliProvider {
     fs.mkdirSync(sandboxDir, { recursive: true });
   }
 
-  describe() { return { id: this.id, model: this.model, simulated: false, cli: this.lastPreflight ? this.lastPreflight.cliPath : null }; }
+  describe() { return { id: this.id, model: this.model, simulated: false, cli: this.lastPreflight ? this.lastPreflight.cliPath : null, note: 'Reálná inference přes Claude Code CLI (předplatné ověřené preflightem).' }; }
 
   billingInfo() {
     const pf = this.lastPreflight;
