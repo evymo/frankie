@@ -6,6 +6,7 @@ převezme výsledek, ověří ho proti akceptačním kritériím a vykáže tele
 
 **Princip:** algoritmy řídí, AI interpretuje a tvoří. *Capabilities may grow; authority may not.*
 Zadání: [`prompts/FRANKENSTEIN_v0.3_zadani.md`](prompts/FRANKENSTEIN_v0.3_zadani.md).
+Stav, výsledky, známé vady a doporučení: [`docs/PASSPORT-v0.3.1.md`](docs/PASSPORT-v0.3.1.md).
 
 ## Spuštění
 
