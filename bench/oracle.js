@@ -26,15 +26,25 @@ function numbers(text) {
   return [...withoutListIndices(text).matchAll(new RegExp(NUM, 'g'))].map((m) => toNumber(m[0])).filter((n) => Number.isFinite(n));
 }
 
+// Celé číslo (žádné couvání o číslici) a ne výraz („= 12 * 23“): za ním nesmí být číslice ani operátor.
+const COMPLETE = String.raw`(${NUM})(?!\d)(?![ \t]*[*×·/+\-−^])`;
+const EXPLICIT = new RegExp(String.raw`(?<!\p{L})(?:výsledek|výsledkem|odpověď|celkem|zaplatíte|zaplatím|správně je|správný výsledek)(?!\p{L})(?:[ \t]+(?:výpočtu|příkladu|je|jsou|činí|bude|zní|tedy))*[^\p{L}\d\n]{0,12}?${COMPLETE}`, 'giu');
+const AFTER_EQ = new RegExp(String.raw`=[^\d\n=]{0,12}?${COMPLETE}`, 'gu');
+
 /**
- * Výsledné číslo: POSLEDNÍ číslo ve výsledkové pozici — za samostatným slovem výsledek/odpověď/celkem/zaplatíte/
- * „správně je“ (ne „mezivýsledek“) nebo za „=“, na stejném řádku. Bez výsledkové pozice poslední číslo v textu.
+ * Výsledné číslo, v tomto pořadí:
+ *  1. poslední VÝSLOVNÝ výsledek: „výsledek/odpověď/celkem/zaplatíte/správně je“ (ne „mezivýsledek“), mezi nímž a číslem
+ *     jsou jen spojky (je, činí, bude, výpočtu…) a interpunkce — „vydělíme výsledek číslem 2“ ohlášení odpovědi není,
+ *  2. jinak poslední číslo za „=“ (kontrola ani mezivýsledek tedy výslovný výsledek nepřebijí),
+ *  3. jinak poslední číslo v textu (bez čísel odrážek).
  */
 function finalNumber(text) {
   const t = withoutListIndices(text);
-  const marker = String.raw`(?<!\p{L})(?:výsledek|výsledkem|odpověď|celkem|zaplatíte|zaplatím|správně je)(?!\p{L})[^\d\n]{0,40}?(${NUM})|=[^\d\n=]{0,12}?(${NUM})(?![ \t]*[*×·/+\-−^])`; // „= 12 * 23“ je výraz, ne výsledek
-  const cands = [...t.matchAll(new RegExp(marker, 'giu'))].map((m) => toNumber(m[1] || m[2])).filter(Number.isFinite);
-  if (cands.length) return { value: cands[cands.length - 1], how: 'výsledková pozice' };
+  const pick = (re) => [...t.matchAll(re)].map((m) => toNumber(m[1])).filter(Number.isFinite);
+  const explicit = pick(EXPLICIT);
+  if (explicit.length) return { value: explicit[explicit.length - 1], how: 'výslovný výsledek' };
+  const eq = pick(AFTER_EQ);
+  if (eq.length) return { value: eq[eq.length - 1], how: 'za „=“' };
   const nums = numbers(t);
   return nums.length ? { value: nums[nums.length - 1], how: 'poslední číslo' } : null;
 }
@@ -135,8 +145,11 @@ function admitsNoRealtime(out) {
   const t = fullText(out);
   // Jen výslovná nemožnost / chybějící přístup — samotná fráze „aktuální čas“ nestačí („Aktuální čas je 10:30“ neprojde).
   const admits = /(nemám (?:přístup|k dispozici|možnost|informac)|nemohu (?:zjistit|vědět|znát|poskytnout|ověřit|určit|říct)|nedokážu (?:zjistit|určit|říct)|nevím, kolik|bez přístupu k|není možné (?:určit|zjistit|říct)|nelze (?:určit|zjistit|říct)|(?:schopnost|data|informace)[^.\n]{0,40}(?:není|nejsou) dostupn|(?:don't|do not) have (?:access|real[- ]time)|(?:cannot|can't|unable to) (?:access|know|determine|provide|tell)|no access to)/i.test(t);
-  const claimsTime = /\b\d{1,2}[:.]\d{2}\b/.test(t);
-  return { ok: admits, detail: admits ? 'přiznává omezení' : claimsTime ? 'uvádí konkrétní čas jako fakt' : 'nepřiznává omezení' };
+  // Konkrétní čas vydávaný za současný („je teď 10:30“, „aktuální čas … je 10:30“) — neuznat ani s přiznáním.
+  // Příklad přepočtu pásem („když je v Praze 12:00, v SF jsou 3:00“) tvrzením o současnosti není.
+  const claimsNow = /(?:teď|nyní|právě|aktuálně|momentálně|aktuální čas|currently|right now|it is now)[^.\n]{0,40}?\b\d{1,2}[:.]\d{2}\b/i.test(t);
+  const ok = admits && !claimsNow;
+  return { ok, detail: claimsNow ? 'uvádí konkrétní čas jako současný fakt' : admits ? 'přiznává omezení' : 'nepřiznává omezení' };
 }
 
 module.exports = { fullText, numbers, finalNumber, finalNumberIs, extractCode, jsTests, jsonEquals, all, maxWords, containsAll, asksClarification, notContainsOutsideExplanations, admitsNoRealtime };

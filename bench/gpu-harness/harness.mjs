@@ -51,7 +51,7 @@ export function parseCompletion(body) {
 
 /** Přímé volání vLLM (OpenAI API) — jen v harnessu, nikdy v kódu FR. */
 export class VllmPrimy {
-  constructor({ role, baseUrl, model, klicEnv, jsonSchema = false, uvazovani = true, maxTokens = null, timeoutMs = 300000, fetchFn = globalThis.fetch, env = process.env }) {
+  constructor({ role, baseUrl, model, klicEnv, jsonSchema = false, uvazovani = false, maxTokens = null, timeoutMs = 300000, fetchFn = globalThis.fetch, env = process.env }) {
     Object.assign(this, { role, baseUrl: baseUrl.replace(/\/+$/, ''), model, klicEnv, jsonSchema, uvazovani, maxTokens, timeoutMs, fetchFn, env });
     this.id = `vllm-${role}`;
     this.simulated = false;
@@ -80,7 +80,7 @@ export class VllmPrimy {
       const r = await this.request('/models', { method: 'GET', headers: this.headers() });
       const data = JSON.parse(await r.text()).data || [];
       const m = data.find((x) => x.id === this.model);
-      this.identita = m ? { served: m.id, root: m.root || m.id, maxModelLen: m.max_model_len ?? null } : null;
+      this.identita = m ? { served: m.id, root: m.root || null, maxModelLen: m.max_model_len ?? null } : null; // bez root nezávislost neověřitelná
       checks.push({ id: `${this.role}_model`, status: r.ok && m ? 'PASS' : 'FAIL', label: `Model ${this.role}`, detail: m ? `${m.id} ← ${m.root || '?'}` : `HTTP ${r.status}; nabízené: ${data.map((x) => x.id).join(', ') || '—'}` });
     } catch (e) {
       checks.push({ id: `${this.role}_model`, status: 'FAIL', label: `Model ${this.role}`, detail: `backend nedostupný: ${e.message}` });
@@ -128,8 +128,8 @@ export class SlozenyProvider {
     const [a, b] = [await this.exec.preflight(), await this.judge.preflight()];
     const checks = [...a.checks, ...b.checks];
     const ia = this.exec.identita, ib = this.judge.identita;
-    const nezavisly = ia && ib && ia.root !== ib.root;
-    checks.push({ id: 'soudce_nezavisly', status: nezavisly ? 'PASS' : 'FAIL', label: 'Soudce ≠ vykonavatel (K9)', detail: ia && ib ? `${ia.root} × ${ib.root}` : 'identita nezjištěna' });
+    const nezavisly = !!(ia && ib && ia.root && ib.root && ia.root !== ib.root);
+    checks.push({ id: 'soudce_nezavisly', status: nezavisly ? 'PASS' : 'FAIL', label: 'Soudce ≠ vykonavatel (K9)', detail: !(ia && ib) ? 'identita nezjištěna' : !(ia.root && ib.root) ? 'backend nevrací root — nezávislost neověřitelná' : `${ia.root} × ${ib.root}` });
     this.pf = { ok: checks.every((c) => c.status === 'PASS'), at: new Date().toISOString(), checks };
     return this.pf;
   }

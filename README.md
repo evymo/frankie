@@ -18,7 +18,7 @@ Výchozí stav v0.3.1, reálné běhy a známé vady: [`docs/PASSPORT-v0.3.1.md`
 
 ## Spuštění
 
-Požadavky: Node.js 22+ (bez npm závislostí). Pro reálnou inferenci Claude Code CLI s předplatným.
+Požadavky: Node.js 22+ (bez npm závislostí). Pro reálnou inferenci Claude Code CLI s předplatným nebo Codex CLI s ChatGPT přihlášením.
 
 ```bash
 start.cmd             # server na http://127.0.0.1:4173
@@ -63,7 +63,7 @@ src/core/criteria.js       typy kontrol a systémová kritéria SYS-1..4
 src/core/telemetry.js      volání, tokeny, cache, časy AI vs. algoritmus, odhad USD vs. ověřená fakturace
 src/core/store.js          JSON záznam běhu (data/runs), obnova po pádu = označení INTERRUPTED
 src/tools/                 arith_eval, csv_to_json, text_stats, JS sandbox (node --permission)
-src/providers/             mock (simulace), claude-cli (předplatné) + preflight + čisté prostředí
+src/providers/             mock (simulace), claude-cli a codex-cli (předplatné) + preflight + čisté prostředí
 src/templates/             verzované šablony analytických volání
 public/                    frontend (HTML/CSS/JS bez závislostí)
 test/                      deterministické testy (node:test)
@@ -98,3 +98,46 @@ Typicky 4–5 volání, ve stavu C 7, strop je 14 (`limits.maxModelCallsPerRun`)
 Viz závěrečný report; hlavní body: mock jen simuluje odpovědi modelu, sandbox JS není plnohodnotná bezpečnostní hranice
 (síť v Node 24 permission modelu neomezuje, je jen staticky zakázána), deterministické detektory jsou hrubé (regex),
 extra usage nelze ověřit strojově.
+
+### Reálná inference přes Codex CLI (ChatGPT přihlášení)
+
+V rozhraní je samostatný provider **Codex CLI**. Žádný automatický přechod mezi providery ani přímé API se nepoužívá.
+Preflight pro každého CLI providera běží zvlášť a lze ho opakovat v dialogu providerů.
+
+1. Nainstalujte Codex CLI s podporou izolačních parametrů (min. 0.162.0) a přihlaste se příkazem `codex login` přes ChatGPT.
+   Přihlášení API klíčem se odmítá. Cestu lze nastavit v `providers.codex-cli.command` nebo proměnnou `FR_CODEX_CLI`.
+   Windows používá nativní `codex.exe` (také z desktop aplikace); na Linuxu musí být CLI nainstalováno v daném prostředí.
+2. Ověřte v nastavení účtu Codex, že nechcete používat placené kredity po vyčerpání limitu předplatného.
+   V `config/fr.config.json` pak ručně doplňte:
+   `billing.codex.creditUsageDisabledAttested: true`, `creditUsageAttestedBy` a `creditUsageAttestedAt`.
+   Výchozí hodnota je false. Starší potvrzení Claude se na Codex nevztahuje; CLI samo stav kreditů neověří.
+3. Spusťte `npm run preflight -- codex-cli` (Windows: `start.cmd preflight codex-cli`).
+   Po úspěchu vyberte Codex CLI v aplikaci. Výchozí model `gpt-6.1-sol` lze změnit v `providers.codex-cli.model`.
+
+Každé volání používá `codex exec --json --ephemeral --ignore-user-config --sandbox read-only`
+v novém prázdném pracovním adresáři. API proměnné a vlastní CODEX_HOME se nepředávají, provider i ChatGPT režim
+jsou vynucené. Shell, web, pluginy, aplikace, hooky, paměť, obrazové nástroje a subagenti jsou vypnutí.
+Načítání projektových instrukcí i hostitelských skills je vypnuté. Prompt se předává pouze přes stdin.
+Výstup, který obsahuje provedení nástroje, chybu, neplatné tokenové počty nebo chybějící dokončení, je odmítnut.
+
+Tokeny a cache pocházejí z JSONL události turn.completed. Codex nezveřejňuje odhad USD v tomto výstupu,
+proto zůstává null; fakturace se nevydává za ověřenou. Reálná inference nebyla součástí deterministických testů.
+
+CLI reference: https://learn.chatgpt.com/docs/cli/reference
+Non-interactive mode: https://learn.chatgpt.com/docs/non-interactive-mode
+
+### Výběr modelu pro běh
+
+Po výběru provideru vyberte v poli **Model** model pro daný běh. Claude: Sonnet 5.5, Opus 5.5 a Haiku 5.5.
+Codex: GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra a GPT-5.6 Luna
+(podle katalogu přihlášeného Codex CLI ověřeného 2026-10-09).
+Fable 5.1 je uveden jako zakázaný, protože neinteraktivní Claude Code může účtovat usage credits bez dotazu.
+Modely pouze pro přímé API nebo vyřazené z předplatného nejsou nabízeny.
+
+Každý běh uchovává vybraný model v input.options.model a v telemetrii. Výběr jiného modelu nemění výchozí
+model ani stav jiného běhu; pokračování po upřesnění zachovává původní model. Backend odmítá
+modely mimo katalog provideru (BAD_MODEL), včetně Fable. Nedostupnost modelu v daném účtu je chyba CLI,
+ne spouštěč placené náhradní cesty.
+
+Katalog: src/providers/models.js.
+Zdroje: https://code.claude.com/docs/en/model-config a https://learn.chatgpt.com/docs/models.

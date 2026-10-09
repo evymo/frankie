@@ -62,6 +62,15 @@ class OpenAICompatProvider {
     };
   }
 
+  /** Modely pro výběr v UI: jediný vykonavatel; soudce je pevně daný konfigurací backendu (K9). */
+  models() { return [{ id: this.model, label: this.describe().label }]; }
+
+  /** Výběr modelu pro běh — backend má jediného vykonavatele, jiné id odmítne už selectProviderModel. */
+  withModel(entry) {
+    if (entry.id !== this.model) throw Object.assign(new Error('Model není povolen pro zvolený provider.'), { code: 'BAD_MODEL' });
+    return this;
+  }
+
   billingInfo() {
     return {
       mode: this.pricePerMTok ? 'openai-compatible-paid' : 'openai-compatible-self-hosted',
@@ -78,17 +87,26 @@ class OpenAICompatProvider {
     return h;
   }
 
+  /** Odstraní z textu adresy (URL i host:port backendů) — chyby jdou do telemetrie a evidence. */
+  redact(text) {
+    let t = String(text || '').replace(/https?:\/\/[^\s"'<>]+/gi, '<adresa>');
+    for (const ep of [this.exec, this.judge].filter(Boolean)) {
+      for (const part of String(ep.baseUrl).replace(/^[a-z]+:\/\//i, '').split('/')[0].split(/\s+/).filter((x) => x.length > 2)) t = t.split(part).join('<adresa>');
+    }
+    return t;
+  }
+
   async request(ep, pathname, init = {}) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), init.timeoutMs || this.timeoutMs);
     try {
       const res = await this.fetchFn(`${ep.baseUrl}${pathname}`, { ...init, headers: this.headers(ep), signal: ac.signal, redirect: 'error' });
       const body = await res.text();
-      if (!res.ok) throw new Error(`HTTP ${res.status} (${ep.role}): ${body.slice(0, 300)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} (${ep.role}): ${this.redact(body).slice(0, 300)}`);
       return JSON.parse(body);
     } catch (e) {
       if (e.name === 'AbortError') throw new Error(`Časový limit ${init.timeoutMs || this.timeoutMs} ms překročen (${ep.role}).`);
-      throw new Error(`${ep.role}: ${e.message}`);
+      throw new Error(`${ep.role}: ${this.redact(e.message)}`);
     } finally {
       clearTimeout(timer);
     }
@@ -104,8 +122,9 @@ class OpenAICompatProvider {
       try {
         const j = await this.request(ep, '/models', { method: 'GET', timeoutMs: 15000 });
         const m = (j.data || []).find((x) => x.id === ep.model);
-        this.identity[key] = m ? { served: m.id, root: m.root || m.id } : null;
-        checks.push({ id: `model_${ep.role}`, ok: !!m, detail: m ? `${m.id} ← ${m.root || m.id}` : `${ep.model} nenalezen; nabízené: ${(j.data || []).map((x) => x.id).slice(0, 8).join(', ') || '—'}` });
+        // Bez `root` (Ollama, DMR, proxy) nelze nezávislost vah ověřit — servírované jméno se za identitu nepovažuje.
+        this.identity[key] = m ? { served: m.id, root: m.root || null } : null;
+        checks.push({ id: `model_${ep.role}`, ok: !!m, detail: m ? `${m.id} ← ${m.root || 'root neuveden'}` : `${ep.model} nenalezen; nabízené: ${(j.data || []).map((x) => x.id).slice(0, 8).join(', ') || '—'}` });
       } catch (e) {
         this.identity[key] = null;
         checks.push({ id: `model_${ep.role}`, ok: false, detail: e.message });
@@ -113,10 +132,10 @@ class OpenAICompatProvider {
     }
     const ie = this.identity.executor;
     const ij = this.identity.judge;
-    this.k9 = !!(ie && ij && ie.root !== ij.root);
+    this.k9 = !!(ie && ij && ie.root && ij.root && ie.root !== ij.root);
     checks.push({
       id: 'soudce_nezavisly', ok: this.k9 || this.allowSameJudge,
-      detail: this.k9 ? `${ie.root} × ${ij.root}` : `${!this.judge ? 'soudce chybí' : ij && ie ? 'soudce = vykonavatel (stejný root)' : 'identita nezjištěna'}${this.allowSameJudge ? ' — výslovná výjimka, evidence k9: false' : ''}`,
+      detail: this.k9 ? `${ie.root} × ${ij.root}` : `${!this.judge ? 'soudce chybí' : !(ij && ie) ? 'identita nezjištěna' : !(ij.root && ie.root) ? 'backend nevrací root — nezávislost neověřitelná' : 'soudce = vykonavatel (stejný root)'}${this.allowSameJudge ? ' — výslovná výjimka, evidence k9: false' : ''}`,
     });
     this.lastPreflight = { ok: checks.every((c) => c.ok), checks, k9: this.k9, at: new Date().toISOString() };
     return this.lastPreflight;

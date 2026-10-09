@@ -125,3 +125,27 @@ test('Evidence nenese adresu lane: describe, billingInfo, preflight ani chyby ne
   const evidence = JSON.stringify([p.describe(), p.billingInfo(), pf, pfDown]);
   assert.ok(!evidence.includes('lane-gpu') && !evidence.includes('8123'), evidence);
 });
+
+test('K9: backend bez `root` (Ollama, DMR, proxy) — nezávislost neověřitelná → preflight NEPROJDE; alias týchž vah neprojde', async () => {
+  const noRoot = async (url) => (url.endsWith('/models')
+    ? { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'alias-a' }, { id: 'alias-b' }] }) }
+    : { ok: true, status: 200, text: async () => '{}' });
+  const p = new OpenAICompatProvider({ baseUrl: 'http://e/v1', model: 'alias-a', judgeBaseUrl: 'http://j/v1', judgeModel: 'alias-b', fetchFn: noRoot });
+  const pf = await p.preflight();
+  assert.equal(pf.ok, false);
+  assert.equal(p.describe().k9, false);
+  assert.match(pf.checks.find((c) => c.id === 'soudce_nezavisly').detail, /nevrací root/);
+  const w = new OpenAICompatProvider({ baseUrl: 'http://e/v1', model: 'alias-a', judgeBaseUrl: 'http://j/v1', judgeModel: 'alias-b', fetchFn: noRoot, allowSameJudge: true });
+  assert.equal((await w.preflight()).ok, true);
+  assert.equal(w.describe().k9, false);
+});
+
+test('Chybové hlášky nenesou adresu: neplatná baseUrl ani tělo chyby s adresou', async () => {
+  const bad = new OpenAICompatProvider({ baseUrl: 'http://lane gpu.internal:8123/v1', model: 'm', allowSameJudge: true });
+  const pf = await bad.preflight();
+  const echo = new OpenAICompatProvider({ baseUrl: 'http://lane-gpu.internal:8123/v1', model: 'm', allowSameJudge: true,
+    fetchFn: async () => ({ ok: false, status: 502, text: async () => 'upstream http://lane-gpu.internal:8123/v1/models refused (lane-gpu.internal:8123)' }) });
+  const pf2 = await echo.preflight();
+  const all = JSON.stringify([pf, pf2]);
+  assert.ok(!/lane|8123/.test(all), all);
+});

@@ -147,7 +147,7 @@ async function main() {
   const resultsFile = path.join(outDir, 'results.jsonl');
   const write = (rec) => fs.appendFileSync(resultsFile, JSON.stringify(rec) + '\n');
   const saveRun = (run) => fs.writeFileSync(path.join(outDir, 'runs', `${run.id}.json`), JSON.stringify(run, null, 2));
-  fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify({ startedAt: new Date().toISOString(), backends: backends.map((b) => ({ id: b.id, type: b.type, model: b.model || null, judgeModel: b.judgeModel || null })), scenarios: scenarios.map((s) => s.id), modes: args.modes, frVersion: '0.3.1', host: os.hostname() }, null, 2));
+  fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify({ startedAt: new Date().toISOString(), backends: backends.map((b) => ({ id: b.id, type: b.type, model: b.model || null, judgeModel: b.judgeModel || null })), scenarios: scenarios.map((s) => s.id), modes: args.modes, frVersion: require('../package.json').version, platform: `${os.platform()}-${os.arch()}` }, null, 2));
   log(`výstup: ${outDir}`);
 
   for (const b of backends) {

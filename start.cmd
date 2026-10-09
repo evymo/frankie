@@ -10,5 +10,5 @@ if defined FR_NODE set "NODE_EXE=%FR_NODE%"
   exit /b 1
 )
 if /i "%1"=="test" ( "%NODE_EXE%" --test "test/*.test.js" & exit /b %errorlevel% )
-if /i "%1"=="preflight" ( "%NODE_EXE%" src\cli\preflight.js & exit /b %errorlevel% )
+if /i "%1"=="preflight" ( "%NODE_EXE%" src\cli\preflight.js %2 & exit /b %errorlevel% )
 "%NODE_EXE%" src\server.js

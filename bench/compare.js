@@ -16,7 +16,8 @@ async function main() {
   const all = {};
   for (const dir of dirs) {
     const rows = fs.readFileSync(path.join(dir, 'results.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-    Object.assign(all, await summarize(rows, dir));
+    // Stejné id backendu ve více bězích nepřepisovat — odlišit názvem adresáře běhu.
+    for (const [id, v] of Object.entries(await summarize(rows, dir))) all[all[id] ? `${id} (${path.basename(dir)})` : id] = v;
   }
   // Simulované backendy (mock) nemají samostatný dotaz — do srovnání kvality nepatří.
   const ids = Object.keys(all).filter((k) => !all[k].skipped && all[k].accuracy.n && all[k].accuracy.nRaw);

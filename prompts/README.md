@@ -48,3 +48,4 @@ bez souhlasu). Po dokončení testy, tematický commit, push na `main` a český
 |---|---|---|---|
 | [`FRANKENSTEIN_v0.3_zadani.md`](FRANKENSTEIN_v0.3_zadani.md) | v0.3 — samostatný autonomní cyklus úlohy (Gate 0, Goal Audit, A/B/C/D, Goal Contract, Prompt Compiler, Verifier) | CC | realizováno ve v0.3.1 |
 | [`FRANKENSTEIN_v0.4_adaptive_h_learning_ui_CC.md`](FRANKENSTEIN_v0.4_adaptive_h_learning_ui_CC.md) | v0.4 — adaptivní učení H-sestav, živý průběh v UI, modrá hlavní odpověď, prompts-as-repo | CC | realizováno ve v0.4.0 ([architektura](../docs/ARCHITEKTURA-v0.4.md)); kvalitativní účinnost čeká na reálné experimenty |
+| [`FRANKENSTEIN_v0.4_prezentace_CX.md`](FRANKENSTEIN_v0.4_prezentace_CX.md) | podklad (jak FR funguje) a zadání 90s prezentace .pptx týmu Aisha | CX | k realizaci |

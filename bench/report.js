@@ -88,7 +88,7 @@ async function summarize(rows, dir) {
 function render(meta, sum) {
   const L = [];
   L.push(`# FR vs. samostatný dotaz na model — výsledky benchmarku`, '');
-  L.push(`Spuštěno ${meta.startedAt} na ${meta.host}, FR ${meta.frVersion}. Scénáře: ${meta.scenarios.join(', ')}.`);
+  L.push(`Spuštěno ${meta.startedAt} (${meta.platform || meta.host || '—'}), FR ${meta.frVersion}. Scénáře: ${meta.scenarios.join(', ')}.`);
   L.push('Správnost hodnotí **nezávislý orákl** (předem známá odpověď, deterministická kontrola), ne verdikt FR. `*` = řízená chyba.', '');
   for (const [backend, s] of Object.entries(sum)) {
     L.push(`## ${backend}`, '');

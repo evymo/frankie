@@ -28,9 +28,16 @@ async function main() {
     if (pf.ok) { providers[b.id] = p; console.log(`+ ${b.id}: ${p.describe().label}`); }
     else console.log(`- ${b.id}: přeskočen (${pf.checks.filter((c) => !c.ok).map((c) => c.detail).join('; ')})`);
   }
-  const { server } = createServer({ config, providers });
+  const { server, getPreflight } = createServer({ config, providers });
   const port = Number(arg('port', config.server.port));
-  server.listen(port, '127.0.0.1', () => console.log(`FR ${require('../package.json').version}: http://127.0.0.1:${port}  (providery: ${Object.keys(providers).join(', ')})`));
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`FR ${require('../package.json').version}: http://127.0.0.1:${port}  (providery: ${Object.keys(providers).join(', ')})`);
+    // Preflight všech providerů s preflightem (CLI i harness), ať je UI hned nabídne jako připravené.
+    for (const [id, p] of Object.entries(providers)) {
+      if (!p.requiresPreflight) continue;
+      getPreflight(true, id).then((pf) => console.log(`preflight ${id}: ${pf.ok ? 'OK' : 'NEPROŠEL'}`)).catch((e) => console.log(`preflight ${id}: ${e.message}`));
+    }
+  });
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
