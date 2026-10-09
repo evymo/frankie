@@ -32,6 +32,19 @@ test('Deterministické kontroly: number_equals, json_valid, json_equals, json_sc
   assert.equal((await runDeterministic(crit('regex', { pattern: '^\\d+$' }), { output: '42' }, ctx)).result, 'PASS');
 });
 
+test('Deterministická kontrola json_rows_subset: řádky jen z převodu, žádný dvakrát, aspoň jeden', async () => {
+  const rows = { expected: [{ jmeno: 'Ana', vek: 25 }, { jmeno: 'Bob', vek: 40 }, { jmeno: 'Bob', vek: 40 }] };
+  const r = async (output) => (await runDeterministic(crit('json_rows_subset', rows), { output }, ctx)).result;
+  assert.equal(await r('[{"vek":40,"jmeno":"Bob"}]'), 'PASS', 'pořadí klíčů nevadí');
+  assert.equal(await r('[{"jmeno":"Bob","vek":40},{"jmeno":"Bob","vek":40}]'), 'PASS', 'duplicitní řádek, který je v převodu dvakrát');
+  assert.equal(await r('[{"jmeno":"Ana","vek":25},{"jmeno":"Ana","vek":25}]'), 'FAIL', 'řádek použitý víckrát, než je v převodu');
+  assert.equal(await r('[{"jmeno":"Ana","vek":"25"}]'), 'FAIL', 'jiný typ hodnoty (jako json_equals)');
+  assert.equal(await r('[{"jmeno":"Eva","vek":30}]'), 'FAIL', 'vymyšlený řádek');
+  assert.equal(await r('[]'), 'FAIL', 'prázdné pole');
+  assert.equal(await r('{"jmeno":"Ana","vek":25}'), 'FAIL', 'objekt místo pole');
+  assert.equal(await r('není json'), 'FAIL');
+});
+
 test('Testy kódu v sandboxu: správný kód PASS, chybný FAIL', async () => {
   const p = { functionName: 'add', cases: [{ args: [1, 2], expected: 3 }, { args: [0, 0], expected: 0 }] };
   const good = await runDeterministic(crit('js_function_tests', p), { output: '', artifacts: [{ name: 'a.js', type: 'code', language: 'javascript', content: 'function add(a,b){return a+b}' }] }, ctx);

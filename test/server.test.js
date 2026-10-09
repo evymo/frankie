@@ -146,9 +146,9 @@ test('Server v0.4: živé události, KB přehled, experiment přes API (mock ano
   let baseId;
   try {
     const st = await req(port, 'GET', '/api/status');
-    assert.equal(st.json.version, '0.4.1');
+    assert.equal(st.json.version, '0.4.2');
     assert.deepEqual(st.json.coreAspects, ['H1', 'H7', 'H8', 'H9']);
-    assert.equal(st.json.evaluator.version, '1.1.0');
+    assert.equal(st.json.evaluator.version, '1.2.0');
     assert.equal(st.json.learning.realExperiments.enabled, false);
     assert.ok(st.json.phases.includes('PROFILE') && st.json.phases.includes('LEARN'));
 

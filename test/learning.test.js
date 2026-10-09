@@ -227,18 +227,18 @@ test('E — neúspěch kvůli oprávnění se nepřipíše H-sestavě (žádná 
   assert.equal(run.learning.hypotheses.length, 0);
 });
 
-test('E — SYS-4 z operace vymyšlené modelem (PASSPORT §6.1): hodnotitel 1.1.0 ji nezapočte do verdiktu, diagnóza ji označí jako vadu hodnotitele', async () => {
+test('E — SYS-4 z operace vymyšlené modelem (PASSPORT §6.1): hodnotitel ≥ 1.1.0 ji nezapočte do verdiktu, diagnóza ji označí jako vadu hodnotitele', async () => {
   const prompt = 'Vytvoř jednoduchou webovou hru Člověče nezlob se jako jeden HTML soubor.';
   const g = mockGate0({ prompt });
   g.requestedOperations = [{ operation: 'zapsat soubory do pracovního adresáře', category: 'filesystem_write' }];
   const { run } = await runMock({ prompt, script: { gate0: g } });
   const c = run.contracts[0];
-  assert.equal(c.evaluator, '1.1.0');
+  assert.equal(c.evaluator, '1.2.0');
   assert.equal(c.blockedOperations[0].literalSupport, false);
   const sys4 = c.successCriteria.find((x) => x.id === 'SYS-4');
   assert.equal(sys4.mandatory, false);
   const v = run.branches[0].attempts.at(-1).verification;
-  assert.equal(v.evaluator, '1.1.0');
+  assert.equal(v.evaluator, '1.2.0');
   assert.notEqual(v.verdict, 'PARTIAL', 'SYS-4 bez opory verdikt neshodí');
   const item = run.learning.diagnosis[0].items.find((i) => i.criterionId === 'SYS-4');
   assert.equal(item.cause, 'evaluator_suspect');

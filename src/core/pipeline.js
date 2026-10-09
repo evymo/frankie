@@ -28,7 +28,7 @@ const { diagnoseBranch, proposeHypotheses, compareExperiment, observationFor } =
 const { EVALUATOR_VERSION, evaluatorOf } = require('./evaluator');
 const T = require('../templates/analysis');
 
-const FR_VERSION = '0.4.1';
+const FR_VERSION = '0.4.2';
 
 const TRANSITIONS = {
   RECEIVED: ['PROFILE', 'FAILED'],

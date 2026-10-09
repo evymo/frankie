@@ -25,7 +25,7 @@ const CAUSES = {
 };
 
 const SIGNAL_OF_TYPE = {
-  max_words: 'format', min_words: 'format', json_valid: 'format', json_schema: 'format', json_equals: 'format',
+  max_words: 'format', min_words: 'format', json_valid: 'format', json_schema: 'format', json_equals: 'format', json_rows_subset: 'format',
   regex: 'format', contains: 'format', not_contains: 'format', code_artifact_present: 'format', nonempty: 'format',
   js_function_tests: 'tests', number_equals: 'tests', semantic: 'semantic_goal',
 };

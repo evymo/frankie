@@ -5,7 +5,7 @@
  */
 const { CHECK_TYPES } = require('./schemas');
 const { validate } = require('./schema');
-const { extractJson, deepEqual, truncate, normalizeForMatch } = require('./util');
+const { extractJson, deepEqual, canonicalJson, truncate, normalizeForMatch } = require('./util');
 const { words } = require('../tools/textStats');
 const { runFunctionTests } = require('../tools/jsSandbox');
 
@@ -139,6 +139,23 @@ async function runDeterministic(crit, result, ctx) {
       if (!j.ok) return R('FAIL', 'JSON nelze parsovat.', 'Neplatný JSON.');
       return deepEqual(j.value, params.expected) ? R('PASS', 'JSON je shodný s očekávanou hodnotou.')
         : R('FAIL', `Rozdíl: očekáváno ${truncate(JSON.stringify(params.expected), 300)}, nalezeno ${truncate(JSON.stringify(j.value), 300)}`, 'Obsah JSON se liší od očekávaného.');
+    }
+    case 'json_rows_subset': {
+      // Jen pro nástroj csv_to_json: každý řádek výstupu je řádkem deterministického převodu (rovnost jako json_equals),
+      // žádný řádek dvakrát. Úplnost (chybějící řádek u filtru) tím chycená není.
+      const j = jsonFrom(result);
+      if (!j.ok) return R('FAIL', 'JSON nelze parsovat.', 'Neplatný JSON.');
+      const rows = j.value;
+      if (!Array.isArray(rows) || !rows.length || !rows.every((r) => r && typeof r === 'object' && !Array.isArray(r))) return R('FAIL', 'Výstup není neprázdné pole objektů.', 'Neodpovídá tvaru řádků převodu.');
+      const pool = params.expected.map((r) => canonicalJson(r));
+      const used = new Set();
+      for (let i = 0; i < rows.length; i++) {
+        const k = canonicalJson(rows[i]);
+        const at = pool.findIndex((p, idx) => p === k && !used.has(idx));
+        if (at < 0) return R('FAIL', `Řádek ${i + 1} ${truncate(JSON.stringify(rows[i]), 200)} ${pool.includes(k) ? 'je ve výstupu vícekrát než v' : 'není v'} deterministickém převodu.`, 'Výstup obsahuje vymyšlený, změněný nebo zdvojený řádek.');
+        used.add(at);
+      }
+      return R('PASS', `Všech ${rows.length} řádků výstupu je v deterministickém převodu (${pool.length} řádků).`);
     }
     case 'contains': {
       const ok = normalizeForMatch(text).includes(normalizeForMatch(params.text));

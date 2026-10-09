@@ -25,7 +25,7 @@ telemetrii. Od v0.4 se navíc učí, kterou sestavu hledisek použít, ze zkuše
 | **Rozhodnutí** | Rozhodovací tabulka A1/A2/A3/D1/B1/C1 (čistá funkce). Když zadání nejde splnit bezpečně nebo jednoznačně, FR se **doptá** (stav `CLARIFICATION_REQUIRED`) a na odpověď naváže dalším během. |
 | **Goal Contract** | Neměnný, hashovaný a verzovaný kontrakt cíle s akceptačními kritérii; revize = nová verze. |
 | **Exekuce** | Deterministický nástroj, pokud stačí (`arith_eval`, `csv_to_json`, `text_stats`, JS sandbox přes `node --permission`), jinak AI přes provider. Prompt sestaví **Prompt Compiler** deterministicky z verzovaných šablon, bez AI. |
-| **Ověření** | Kritéria se kontrolují deterministicky, v sandboxu nebo sémanticky. Výsledkem je verdikt `PASS / PARTIAL / FAIL / UNVERIFIED` a nejvýš 1 oprava. Volitelně baseline (stejný model bez FR) pro srovnání. |
+| **Ověření** | Kritéria se kontrolují deterministicky, v sandboxu nebo sémanticky. Výsledek deterministického nástroje je povinné kritérium vždy. Výsledkem je verdikt `PASS / PARTIAL / FAIL / UNVERIFIED` a nejvýš 1 oprava. Volitelně baseline (stejný model bez FR) pro srovnání. |
 | **Bezpečnost** | Detektory prompt injection, citlivých dat a operací mimo oprávnění (regex). H7/H8 z konfigurace. Stropy počtu volání a oprav nezávislé na konfiguraci. Běží jen 1 běh najednou. |
 | **Učení (v0.4)** | Volba sestavy hledisek (H-sestavy) podle doložených zkušeností, diagnóza odchylek, kandidátní změny a řízené experimenty proti témuž zamčenému kontraktu. Viz [Učení](#učení-v04). |
 | **Telemetrie** | Volání, tokeny, cache, čas AI × algoritmus, odhad USD vs. ověřená fakturace, zvolený model. |
@@ -219,7 +219,7 @@ src/core/profile.js        charakteristika zadání (bez AI) a kvalitativní sho
 src/core/aspectSets.js     verzované H-sestavy; invarianty systémových garancí H1/H7/H8/H9
 src/core/knowledge.js      sdílená Knowledge Base (knowledge/, append-only), výběr sestavy, stavy důvěryhodnosti
 src/core/learning.js       diagnóza příčin, kandidátní hypotézy, řízené srovnání
-src/core/evaluator.js      verze hodnotitele s historií (SYS-4 1.1.0)
+src/core/evaluator.js      verze hodnotitele s historií (1.2.0: výsledek nástroje povinný vždy)
 src/core/gate0.js          Gate 0 — 1 AI volání pro H1–H10 + deterministické úpravy priorit, ověření citací, H7/H8 z konfigurace
 src/core/detectors.js      explicitní cíl, prompt injection, citlivá data, operace mimo oprávnění (regex, bez AI)
 src/core/goalAudit.js      Goal Audit (izolované volání bez H1) + kvalitativní porovnání s evidencí původu
@@ -264,9 +264,15 @@ inference. Jádro podle backendu nevětví.
   hypotéza „odebrat H10“). Návrh se uloží jen jako kandidát. Aktivní se může stát až po nejméně 2 reálných řízených
   srovnáních, a reálné experimenty jsou ve výchozí konfiguraci vypnuté. Reálné experimenty proto nezapínejte kvůli
   ověřování redukcí, dokud M-FR1 tuto podmínku nedoplní do kódu.
-- Výsledek deterministického výpočtu (`arith_eval`) je povinné kritérium vždy, takže chybné číslo nikdy neprojde jako
-  PASS. Nástroj ale zatím nemá veto: když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
-  U `csv_to_json` je převod povinný jen při úplném řešení, protože u filtrování je úplný převod jen mezikrok.
+- Výsledek deterministického nástroje je od hodnotitele 1.2.0 povinný vždy. O povinnosti nerozhoduje model
+  (`fullySolves` z Gate 0):
+  - `arith_eval`: chybné číslo nikdy neprojde jako PASS;
+  - `csv_to_json`: každý řádek výstupu musí být řádkem deterministického převodu (`json_rows_subset`, nic vymyšleného
+    ani zdvojeného). Úplnou shodu s převodem vyžaduje jen úplné řešení.
+
+  Nástroj ale zatím nemá veto. Když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
+- **Úplnost u filtrovaného CSV není hlídaná:** odpověď, které chybí řádek splňující filtr (např. chybí Cyril), projde
+  kontrolou nástroje. Řešení (kritérium s cestou, typované kontroly) je naplánované do M-FR1.
 - Číselná kontrola (`number_equals`) bere **poslední číslo** výstupu. Odpověď, která uvede výsledek před postupem,
   proto může neprojít i se správným výsledkem.
 

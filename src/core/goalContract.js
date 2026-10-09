@@ -36,9 +36,12 @@ function toolCriteria(plan) {
     return [{ id: 'TOOL-1', description: `Číselný výsledek odpovídá přesnému výpočtu ${plan.input} = ${plan.value}.`, mandatory: true, verification: { kind: 'deterministic', type: 'number_equals', params: { expected: plan.value, tolerance: 1e-6 } }, origin: 'deterministic_tool' }];
   }
   if (plan.tool === 'csv_to_json') {
-    // Úplný převod je očekávaný výsledek jen u úplného řešení; u filtrování nebo řazení by povinné json_equals
-    // shodilo i správnou odpověď (nástroj tu spočítal jen mezikrok).
-    return [{ id: 'TOOL-1', description: 'JSON obsahově odpovídá deterministickému převodu vstupního CSV.', mandatory: plan.fullySolves, verification: { kind: 'deterministic', type: 'json_equals', params: { expected: plan.value } }, origin: 'deterministic_tool' }];
+    // fullySolves vyplňuje model, proto o povinnosti TOOL-1 nerozhoduje: řádky a hodnoty nesmí být vymyšlené nikdy.
+    // Úplnost (TOOL-2) jen u úplného převodu; u filtrování je úplný převod mezikrok a správnou odpověď by shodil.
+    return [
+      { id: 'TOOL-1', description: 'Každý řádek výstupu je řádkem deterministického převodu vstupního CSV (nic vymyšleného ani zdvojeného).', mandatory: true, verification: { kind: 'deterministic', type: 'json_rows_subset', params: { expected: plan.value } }, origin: 'deterministic_tool' },
+      { id: 'TOOL-2', description: 'JSON obsahově odpovídá úplnému deterministickému převodu vstupního CSV.', mandatory: plan.fullySolves, verification: { kind: 'deterministic', type: 'json_equals', params: { expected: plan.value } }, origin: 'deterministic_tool' },
+    ];
   }
   return [];
 }

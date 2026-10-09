@@ -40,6 +40,7 @@ function verificationLabel(v) {
   switch (v.type) {
     case 'number_equals': return 'deterministicky: porovnání posledního čísla ve výstupu';
     case 'json_equals': return 'deterministicky: porovnání obsahu JSON';
+    case 'json_rows_subset': return 'deterministicky: každý řádek výstupu je řádkem převodu nástrojem (bez vymyšlených a zdvojených)';
     case 'json_schema': return 'deterministicky: validace JSON schématu';
     case 'js_function_tests': return `deterministicky: spuštění testů funkce ${p.functionName} v sandboxu (${(p.cases || []).length} případů, JavaScript)`;
     case 'max_words': return `deterministicky: nejvýše ${p.n} slov`;

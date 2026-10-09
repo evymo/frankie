@@ -254,12 +254,39 @@ test('E2E — výsledek deterministického nástroje je povinný vždy: S01 201 
   assert.notEqual(b.finalVerdict, 'PASS');
 });
 
-test('E2E — CSV s filtrem: úplný převod nástrojem je jen mezikrok, správnou odpověď nesmí shodit', async () => {
-  const prompt = 'Převeď CSV na JSON a ponech jen lidi starší 30 let:\njmeno,vek\nAna,25\nBob,40\nCyril,35';
-  const correct = { status: 'completed', output: '[{"jmeno":"Bob","vek":40},{"jmeno":"Cyril","vek":35}]', outputFormat: 'json', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] };
-  const { run } = await runMock({ prompt, script: { execute: correct } });
+const CSV = 'jmeno,vek\nAna,25\nBob,40\nCyril,35';
+const jsonOut = (rows) => ({ status: 'completed', output: JSON.stringify(rows), outputFormat: 'json', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] });
+// Mock je simulace: sémantické GOAL-1 zůstane UNVERIFIED, celkový PASS tu vyjít nemůže. Proto testy chybných výstupů
+// chtějí FAIL/PARTIAL a spuštěnou opravu (samotné „ne PASS“ by prošlo i bez povinné kontroly nástroje).
+
+test('E2E — CSV s filtrem, správná odpověď: TOOL-1 (řádky z převodu) PASS, úplnost TOOL-2 nepovinná, bez opravy', async () => {
+  const { run } = await runMock({ prompt: `Převeď CSV na JSON a ponech jen lidi starší 30 let:\n${CSV}`, script: { execute: jsonOut([{ jmeno: 'Bob', vek: 40 }, { jmeno: 'Cyril', vek: 35 }]) } });
+  const crit = run.contracts[0].successCriteria;
   assert.equal(run.contracts[0].toolPlan.fullySolves, false);
-  assert.equal(run.contracts[0].successCriteria.find((c) => c.id === 'TOOL-1').mandatory, false);
+  assert.equal(crit.find((c) => c.id === 'TOOL-1').mandatory, true);
+  assert.equal(crit.find((c) => c.id === 'TOOL-2').mandatory, false);
+  assert.equal(criterion(run, 0, 'TOOL-1', 0).result, 'PASS');
   assert.ok(!['FAIL', 'PARTIAL'].includes(run.branches[0].attempts[0].verification.verdict));
   assert.equal(run.branches[0].attempts.length, 1, 'bez zbytečné opravy');
+});
+
+test('E2E — CSV s filtrem a změněnou hodnotou (Bob 40 → 41): TOOL-1 FAIL, ne PASS', async () => {
+  const { run } = await runMock({ prompt: `Převeď CSV na JSON a ponech jen lidi starší 30 let:\n${CSV}`, script: { execute: jsonOut([{ jmeno: 'Bob', vek: 41 }, { jmeno: 'Cyril', vek: 35 }]) } });
+  assert.equal(criterion(run, 0, 'TOOL-1', 0).result, 'FAIL');
+  assert.ok(['FAIL', 'PARTIAL'].includes(run.branches[0].attempts[0].verification.verdict), run.branches[0].attempts[0].verification.verdict);
+  assert.equal(run.branches[0].attempts.length, 2, 'oprava se spustila');
+  assert.notEqual(run.branches[0].finalVerdict, 'PASS');
+});
+
+test('E2E — prostý převod CSV s chybnou hodnotou, model tvrdí fullySolves=false: ne PASS (o povinnosti nerozhoduje model)', async () => {
+  const { mockGate0 } = require('./helpers');
+  const prompt = `Převeď CSV na JSON:\n${CSV}`;
+  const g = mockGate0({ prompt });
+  const gate0 = { ...g, toolCandidates: g.toolCandidates.map((c) => ({ ...c, fullySolves: false })) };
+  const { run } = await runMock({ prompt, script: { gate0, execute: jsonOut([{ jmeno: 'Ana', vek: 26 }, { jmeno: 'Bob', vek: 40 }, { jmeno: 'Cyril', vek: 35 }]) } });
+  assert.equal(run.contracts[0].toolPlan.fullySolves, false);
+  assert.equal(criterion(run, 0, 'TOOL-1', 0).result, 'FAIL');
+  assert.ok(['FAIL', 'PARTIAL'].includes(run.branches[0].attempts[0].verification.verdict), run.branches[0].attempts[0].verification.verdict);
+  assert.equal(run.branches[0].attempts.length, 2, 'oprava se spustila');
+  assert.notEqual(run.branches[0].finalVerdict, 'PASS');
 });
