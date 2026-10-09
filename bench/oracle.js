@@ -12,42 +12,8 @@ function fullText(out) {
   return [out.output || '', ...(out.artifacts || []).map((a) => a.content || '')].join('\n');
 }
 
-// Číslo: tisíce jen mezerou/nbsp mezi trojicemi číslic (1 234,56) — nikdy přes nový řádek.
-const NUM = String.raw`-?\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?(?!\d)|-?\d+(?:[.,]\d+)?`;
-const toNumber = (s) => Number(s.replace(/[   ]/g, '').replace(',', '.'));
-
-/** Text bez čísel odrážek („2. krok“, „3) …“) na začátku řádku. */
-function withoutListIndices(text) {
-  return String(text).replace(/^[ \t]*\d+[.)][ \t]+/gm, '');
-}
-
-/** Čísla ve výstupu v pořadí výskytu (s pozicí). */
-function numbers(text) {
-  return [...withoutListIndices(text).matchAll(new RegExp(NUM, 'g'))].map((m) => toNumber(m[0])).filter((n) => Number.isFinite(n));
-}
-
-// Celé číslo (žádné couvání o číslici) a ne výraz („= 12 * 23“): za ním nesmí být číslice ani operátor.
-const COMPLETE = String.raw`(${NUM})(?!\d)(?![ \t]*[*×·/+\-−^])`;
-const EXPLICIT = new RegExp(String.raw`(?<!\p{L})(?:výsledek|výsledkem|odpověď|celkem|zaplatíte|zaplatím|správně je|správný výsledek)(?!\p{L})(?:[ \t]+(?:výpočtu|příkladu|je|jsou|činí|bude|zní|tedy))*[^\p{L}\d\n]{0,12}?${COMPLETE}`, 'giu');
-const AFTER_EQ = new RegExp(String.raw`=[^\d\n=]{0,12}?${COMPLETE}`, 'gu');
-
-/**
- * Výsledné číslo, v tomto pořadí:
- *  1. poslední VÝSLOVNÝ výsledek: „výsledek/odpověď/celkem/zaplatíte/správně je“ (ne „mezivýsledek“), mezi nímž a číslem
- *     jsou jen spojky (je, činí, bude, výpočtu…) a interpunkce — „vydělíme výsledek číslem 2“ ohlášení odpovědi není,
- *  2. jinak poslední číslo za „=“ (kontrola ani mezivýsledek tedy výslovný výsledek nepřebijí),
- *  3. jinak poslední číslo v textu (bez čísel odrážek).
- */
-function finalNumber(text) {
-  const t = withoutListIndices(text);
-  const pick = (re) => [...t.matchAll(re)].map((m) => toNumber(m[1])).filter(Number.isFinite);
-  const explicit = pick(EXPLICIT);
-  if (explicit.length) return { value: explicit[explicit.length - 1], how: 'výslovný výsledek' };
-  const eq = pick(AFTER_EQ);
-  if (eq.length) return { value: eq[eq.length - 1], how: 'za „=“' };
-  const nums = numbers(t);
-  return nums.length ? { value: nums[nums.length - 1], how: 'poslední číslo' } : null;
-}
+// Jeden výklad výsledného čísla s verifikátorem FR (number_equals, hodnotitel 1.3.0): src/core/numbers.js.
+const { numbers, finalNumber } = require('../src/core/numbers');
 
 /** Je výsledné číslo výstupu rovno očekávané hodnotě? */
 function finalNumberIs(expected, tolerance = 1e-9) {

@@ -8,6 +8,8 @@
 const { sha256 } = require('./util');
 const { fence, DATA_RULE, JSON_RULE } = require('../templates/common');
 const { PRIORITY_LABELS } = require('./aspects');
+const { numberGuard } = require('./goalContract');
+const { replaceNumbers } = require('./numbers');
 
 // 1.1.0: řádek s analytickou sestavou v sekci priorit + stopa hledisek (v0.4)
 const EXECUTION_TEMPLATE = { id: 'execution-contract', version: '1.1.0' };
@@ -38,7 +40,7 @@ function verificationLabel(v) {
   if (v.kind === 'semantic') return 'sémantické posouzení nezávislým hodnotitelem';
   const p = v.params || {};
   switch (v.type) {
-    case 'number_equals': return 'deterministicky: porovnání posledního čísla ve výstupu';
+    case 'number_equals': return 'deterministicky: porovnání ohlášeného výsledku (jinak posledního z „celkem“ / „=“, jinak posledního čísla)';
     case 'json_equals': return 'deterministicky: porovnání obsahu JSON';
     case 'json_rows_subset': return 'deterministicky: každý řádek výstupu je řádkem převodu nástrojem (bez vymyšlených a zdvojených)';
     case 'json_schema': return 'deterministicky: validace JSON schématu';
@@ -75,16 +77,20 @@ function sections({ prompt, clarifications, contract, gate0 }) {
   ].filter(Boolean).join('\n')]);
   const trace = aspectTrace(gate0);
   const relevant = trace.included.map((t) => gate0.aspects.find((a) => a.id === t.id));
+  // Veto nástroje (hodnotitel 1.3.1) i pro zjištění hledisek z Gate 0, která jdou do promptu: číslo, které není výsledkem
+  // nástroje, mezivýsledkem ani v zadání, se přepíše na výsledek nástroje (Gate 0 píše tentýž model jako kontrakt).
+  const guard = numberGuard(contract.toolPlan, [prompt, contract.origin && contract.origin.explicitGoal && contract.origin.explicitGoal.text, ...(clarifications || []).map((x) => x.answer)]);
+  const g = (text) => (guard && text ? replaceNumbers(text, guard.foreign, guard.toolValue).text : text);
   const setLine = `Analytická sestava: ${trace.aspectSet.id}@v${trace.aspectSet.version} — hlediska ${gate0.aspects.map((a) => a.id).join(', ')}.\n`;
   s.push([PRIORITY_SECTION, setLine + relevant.map((a) =>
-    `[${a.finalPriority}] ${a.id} ${a.name}: ${a.finding}\n   → doporučení: ${a.recommendation || '—'}`).join('\n')
+    `[${a.finalPriority}] ${a.id} ${a.name}: ${g(a.finding)}\n   → doporučení: ${g(a.recommendation) || '—'}`).join('\n')
     + `\n(Legenda: P0 ${PRIORITY_LABELS.P0}; P1 ${PRIORITY_LABELS.P1}; P2 ${PRIORITY_LABELS.P2}. Hlediska s P3 vynechána.)`]);
   s.push(['POVINNÁ OMEZENÍ', list(contract.constraints)]);
   s.push(['BLOKOVANÉ OPERACE A NEDOSTUPNÉ SCHOPNOSTI (určeno systémovou konfigurací)', [
     'Blokované operace:', list(contract.blockedOperations.map((o) => `${o.operation} [${o.category}]`)),
     'Nedostupné schopnosti:', list(contract.unavailableCapabilities),
   ].join('\n')]);
-  const missing = gate0.aspects.flatMap((a) => (a.missingInfo || []).map((m) => `${m.item}${m.critical ? ' (kritické)' : ''} [${a.id}]`));
+  const missing = gate0.aspects.flatMap((a) => (a.missingInfo || []).map((m) => `${g(m.item)}${m.critical ? ' (kritické)' : ''} [${a.id}]`));
   s.push(['CHYBĚJÍCÍ INFORMACE', list(Array.from(new Set(missing)), '— nebyly identifikovány —') + '\nChybějící informace nedoplňuj vymyšlenými fakty; pokud musíš předpokládat, uveď to v assumptionsUsed.']);
   const facts = [
     ...gate0.aspects.flatMap((a) => a.evidence.filter((e) => e.verified).map((e) => `„${e.quote}“ (doslovně v zadání)`)),

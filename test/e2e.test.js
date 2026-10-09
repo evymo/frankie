@@ -290,3 +290,109 @@ test('E2E — prostý převod CSV s chybnou hodnotou, model tvrdí fullySolves=f
   assert.equal(run.branches[0].attempts.length, 2, 'oprava se spustila');
   assert.notEqual(run.branches[0].finalVerdict, 'PASS');
 });
+
+test('E2E — veto nástroje (hodnotitel 1.3.1, nález 7): AC „obsahuje 201“ × nástroj 198 → kontrakt nese 198 a nález; správná odpověď bez opravy', async () => {
+  const { mockGate0, mockAudit } = require('./helpers');
+  const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
+  const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';
+  const g = mockGate0({ prompt });
+  const gate0 = { ...g, toolCandidates: g.toolCandidates.map((c) => ({ ...c, fullySolves: false })) };
+  const a = mockAudit({ prompt });
+  // Jako fr-exec v nálezu 7: audit si výsledek spočítal špatně a vepsal ho do povinného kritéria.
+  const contaminated = { description: 'Odpověď obsahuje správný číselný výsledek 201.', mandatory: true, check: { type: 'contains', params: { text: '201' } } };
+  const audit = { ...a, acceptanceCriteria: [contaminated, ...a.acceptanceCriteria.filter((c) => c.check.type !== 'number_equals')] };
+  const correct = { status: 'completed', output: 'Výsledek výrazu (17*23+5)/2 je 198.\n\nPostup výpočtu:\n1. 17 * 23 = 391.\n2. 391 + 5 = 396.\n3. 396 / 2 = 198.', outputFormat: 'text', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] };
+  const { run, provider } = await runMock({ prompt, script: { gate0, goal_audit: audit, execute: correct } });
+  const k = run.contracts[0];
+  const replaced = k.successCriteria.find((c) => c.origin === 'tool_override');
+  assert.ok(replaced, 'kritérium z modelu nahrazeno kontrolou nástroje');
+  assert.deepEqual(replaced.verification, { kind: 'deterministic', type: 'number_equals', params: { expected: 198, tolerance: 1e-6 } });
+  assert.ok(!k.successCriteria.some((c) => /201/.test(c.description) || (c.verification.params && (c.verification.params.text === '201' || c.verification.params.expected === 201))), 'hodnota 201 v kontraktu není');
+  assert.equal(k.findings.length, 1);
+  assert.deepEqual([k.findings[0].type, k.findings[0].status, k.findings[0].modelValue, k.findings[0].toolValue], ['tool_conflict', 'proposed', 201, 198]);
+  assert.ok(!run.branches[0].attempts[0].compiledPrompt.text.includes('201'), 'Execution Contract hodnotu z modelu nenese');
+  // Mutant „AC z modelu přes rozpor s nástrojem“: bez veta by AC-1 („obsahuje 201“) u správné odpovědi selhalo → oprava.
+  assert.equal(criterion(run, 0, replaced.id, 0).result, 'PASS');
+  assert.equal(criterion(run, 0, 'TOOL-1', 0).result, 'PASS');
+  assert.equal(run.branches[0].attempts.length, 1, 'správná odpověď bez opravy');
+  assert.equal(provider.counts.execute, 1);
+  assert.equal(run.report.contractFindings.length, 1, 'nález kontraktu je v reportu');
+  // (f) diagnóza: příčina v kontraktu/verifikaci, z běhu se nenavrhuje změna H (ani redukce).
+  const d = diagnoseBranch({ run, branch: run.branches[0] });
+  assert.equal(d.contractConflict, true);
+  assert.equal(d.hFeedback, false);
+  assert.match(d.summary, /Rozpor kontraktu s výsledkem nástroje/);
+  assert.deepEqual(run.learning.hypotheses, []);
+  const forced = proposeHypotheses({ diagnoses: [{ ...d, verdict: 'PASS' }], profile: run.learning.profile, aspectSet: run.learning.selection.set, gate0: { aspects: run.gate0.aspects.map((x) => ({ ...x, kind: 'adaptive', finalPriority: 'P3' })) }, runId: run.id, simulated: false });
+  assert.deepEqual(forced, [], 'ani redukce z reálného „úspěchu“ s kontaminovaným kontraktem');
+});
+
+test('E2E — veto nástroje nezasahuje, když je kritérium z modelu v souladu s nástrojem nebo nese mezivýsledek', async () => {
+  const { mockGate0, mockAudit } = require('./helpers');
+  const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';
+  const g = mockGate0({ prompt });
+  const gate0 = { ...g, toolCandidates: g.toolCandidates.map((c) => ({ ...c, fullySolves: false })) };
+  const a = mockAudit({ prompt });
+  const step = { description: 'Postup uvádí mezivýsledek 391 (17*23).', mandatory: true, check: { type: 'contains', params: { text: '391' } } };
+  const audit = { ...a, acceptanceCriteria: [...a.acceptanceCriteria, step] };
+  const { run } = await runMock({ prompt, script: { gate0, goal_audit: audit } });
+  const k = run.contracts[0];
+  assert.deepEqual(k.findings, [], 'number_equals 198 (= nástroj) ani mezivýsledek 391 nejsou rozpor');
+  assert.ok(!k.successCriteria.some((c) => c.origin === 'tool_override'));
+  assert.ok(k.successCriteria.some((c) => c.verification.type === 'contains' && c.verification.params.text === '391'), 'mezivýsledek zůstal');
+});
+
+test('E2E — veto bez klíčových slov (hodnotitel 1.3.1): všechny únikové cesty z revize, správná odpověď 198 bez opravy', async () => {
+  const { mockGate0, mockAudit } = require('./helpers');
+  const { diagnoseBranch } = require('../src/core/learning');
+  const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';
+  const g = mockGate0({ prompt });
+  const gate0 = { ...g, toolCandidates: g.toolCandidates.map((c) => ({ ...c, fullySolves: false })),
+    aspects: g.aspects.map((x) => (x.id === 'H1' ? { ...x, finding: 'Očekávaný výsledek je 201.', priority: 'P1' } : x)) };
+  const a = mockAudit({ prompt });
+  const crit = (description, type, params) => ({ description, mandatory: true, check: params ? { type, params } : { type } });
+  const audit = {
+    ...a,
+    statement: 'Uživatel chce zjistit výsledek 201 výrazu (17*23+5)/2 a postup.',
+    expectedOutput: { ...a.expectedOutput, description: 'Číslo 201 a stručný postup.' },
+    constraints: ['Výsledek musí být 201.', 'Postup uveď v krocích.'],
+    assumptions: ['Uživatel očekává 201.'],
+    acceptanceCriteria: [
+      crit('Výstup obsahuje číslo 201.', 'contains', { text: '201' }),
+      crit('Odpověď uvádí 201.', 'contains', { text: '201' }),
+      crit('Výstup obsahuje požadovanou hodnotu.', 'contains', { text: '201' }),
+      crit('Výsledek je správně spočítaný.', 'number_equals', { expected: 201, tolerance: 1e-6 }),
+      crit('Výstup odpovídá vzoru.', 'regex', { pattern: '\\b201\\b' }),
+      crit('Výstup neobsahuje chybnou hodnotu.', 'not_contains', { text: '198' }),
+      crit('Výsledek výrazu (17*23+5)/2 je 201.', 'semantic'),
+      crit('The final result is 201.', 'semantic'),
+      crit('Odpověď má nejvýše 120 slov.', 'max_words', { n: 120 }),
+      crit('Postup uvádí mezivýsledek 391.', 'contains', { text: '391' }),
+    ],
+  };
+  const correct = { status: 'completed', output: 'Výsledek výrazu (17*23+5)/2 je 198.\n\nPostup výpočtu:\n1. 17 * 23 = 391.\n2. 391 + 5 = 396.\n3. 396 / 2 = 198.', outputFormat: 'text', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] };
+  const { run, provider } = await runMock({ prompt, script: { gate0, goal_audit: audit, execute: correct } });
+  const k = run.contracts[0];
+  const text = run.branches[0].attempts[0].compiledPrompt.text;
+  assert.ok(!text.includes('201'), `Execution Contract nenese 201:\n${text.split('\n').filter((l) => l.includes('201')).join('\n')}`);
+  const overridden = k.successCriteria.filter((c) => c.origin === 'tool_override');
+  assert.equal(overridden.length, 8, 'contains ×3 (i s neutrálním popisem), number_equals 201 s neutrálním popisem, regex, not_contains 198, sémantické CZ i EN');
+  assert.ok(overridden.every((c) => c.verification.type === 'number_equals' && c.verification.params.expected === 198));
+  assert.ok(k.successCriteria.some((c) => c.verification.type === 'max_words' && c.verification.params.n === 120), 'limit slov (typ bez výsledku) zůstal');
+  assert.ok(k.successCriteria.some((c) => c.verification.type === 'contains' && c.verification.params.text === '391'), 'mezivýsledek 391 zůstal');
+  assert.ok(k.statement.includes('198') && !k.statement.includes('201'), 'cíl přepsán na hodnotu nástroje');
+  assert.ok(!k.successCriteria.find((c) => c.id === 'GOAL-1').description.includes('201'), 'GOAL-1 bez 201');
+  assert.ok(!k.expectedOutput.description.includes('201'));
+  assert.deepEqual(k.constraints.filter((c) => c.includes('201')), [], 'omezení s 201 vyřazeno');
+  assert.ok(k.constraints.includes('Postup uveď v krocích.'), 'ostatní omezení zůstala');
+  assert.deepEqual(k.assumptions.filter((c) => c.includes('201')), []);
+  const fields = new Set(k.findings.map((f) => f.field));
+  for (const f of ['successCriteria', 'statement', 'expectedOutput.description', 'constraints', 'assumptions']) assert.ok(fields.has(f), `nález pro ${f}`);
+  assert.ok(k.findings.every((f) => f.type === 'tool_conflict' && f.status === 'proposed' && f.toolValue === 198));
+  assert.equal(run.report.contractFindings.length, k.findings.length);
+  assert.equal(run.branches[0].attempts.length, 1, 'správná odpověď bez opravy');
+  assert.equal(provider.counts.execute, 1);
+  const d = diagnoseBranch({ run, branch: run.branches[0] });
+  assert.equal(d.contractConflict, true);
+  assert.deepEqual(run.learning.hypotheses, []);
+});

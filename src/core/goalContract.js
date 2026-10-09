@@ -7,6 +7,8 @@ const { sha256, canonicalJson, deepFreeze, clone, nowIso } = require('./util');
 const { systemCriteria } = require('./criteria');
 const { EVALUATOR_VERSION } = require('./evaluator');
 const { runTool, TOOLS } = require('../tools');
+const { numbers, replaceNumbers } = require('./numbers');
+const { evaluateWithSteps } = require('../tools/arith');
 
 const SCHEMA_VERSION = 'goal-contract/1.0';
 
@@ -46,6 +48,98 @@ function toolCriteria(plan) {
   return [];
 }
 
+// Typy kontrol, u nichž je číslo limitem nebo strukturou, ne výsledkem (veto je nebere).
+const NON_RESULT_TYPES = new Set(['max_words', 'min_words', 'json_valid', 'json_schema', 'json_equals', 'json_rows_subset', 'js_function_tests', 'code_artifact_present', 'nonempty', 'no_blocked_claims', 'blocked_scope']);
+const near = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+
+/**
+ * Hlídač čísel u arith_eval (veto nástroje, hodnotitel 1.3.1). Povolená čísla = výsledek nástroje ∪ mezivýsledky
+ * výrazu ∪ čísla doslovně v zadání (a v upřesněních / explicitním cíli). Bez klíčových slov: o rozporu rozhoduje jen to,
+ * zda je číslo matematicky doložené, ne jak ho model formuloval. Vrací null, když kontrakt nemá číselný nástroj.
+ */
+function numberGuard(plan, texts = []) {
+  if (!plan || plan.tool !== 'arith_eval' || !Number.isFinite(plan.value)) return null;
+  let steps = [];
+  try { steps = evaluateWithSteps(plan.input).steps; } catch (_) { steps = []; }
+  const base = [plan.value, ...steps, ...numbers(plan.input), ...texts.flatMap((t) => numbers(t || ''))];
+  const allowed = [...base, ...base.map((n) => Math.abs(n))];
+  return { plan, toolValue: plan.value, allowed, foreign: (n) => !allowed.some((x) => near(n, x)) };
+}
+
+/** Cizí čísla, která kritérium navržené modelem nese ([] = v pořádku). Kritéria nástroje a systému se neberou. */
+function criterionForeignNumbers(c, guard) {
+  if (!guard || c.origin === 'deterministic_tool' || c.origin === 'tool_override' || (c.origin === 'system' && c.id !== 'GOAL-1')) return [];
+  const v = c.verification || {};
+  const p = v.params || {};
+  if (NON_RESULT_TYPES.has(v.type)) return [];
+  if (v.type === 'not_contains') {
+    // Zakázat chybnou hodnotu je v pořádku; zakázat výsledek nástroje (nebo mezivýsledek) je rozpor.
+    return numbers(p.text || '').some((n) => !guard.foreign(n)) ? [guard.toolValue] : [];
+  }
+  const found = numbers(c.description || '').filter(guard.foreign);
+  if (v.type === 'number_equals' && Number.isFinite(Number(p.expected)) && guard.foreign(Number(p.expected))) found.push(Number(p.expected));
+  if (v.type === 'contains') found.push(...numbers(p.text || '').filter(guard.foreign));
+  // Ve vzoru regexu se kvantifikátory {n,m} a třídy \d … za čísla nepovažují.
+  if (v.type === 'regex') found.push(...numbers(String(p.pattern || '').replace(/\{\d+(?:,\d*)?\}/g, ' ').replace(/\\[a-zA-Z]/g, ' ')).filter(guard.foreign));
+  return [...new Set(found)];
+}
+
+function conflictFinding(guard, extra) {
+  return { type: 'tool_conflict', status: 'proposed', toolValue: guard.toolValue, tool: guard.plan.tool, toolInput: guard.plan.input, ...extra };
+}
+
+/**
+ * Veto nástroje při vzniku kontraktu: kritérium z modelu s cizím číslem se nahradí kontrolou hodnoty nástroje
+ * (popis náhrady číslo z modelu NEnese — jde do Execution Contract), rozpor → nález kontraktu (proposed).
+ */
+function vetoCriterion(c, guard, findings) {
+  const foreign = criterionForeignNumbers(c, guard);
+  if (!foreign.length) return c;
+  findings.push(conflictFinding(guard, {
+    field: 'successCriteria', criterionId: c.id, criterionDescription: c.description, criterionOrigin: c.origin || null, checkType: (c.verification || {}).type || null,
+    modelValue: foreign[0], modelValues: foreign,
+    resolution: `Kritérium z modelu nahrazeno kontrolou výsledku nástroje (${guard.toolValue}); čísla z modelu (${foreign.join(', ')}) se do kontraktu nedostala.`,
+  }));
+  return {
+    id: c.id, mandatory: c.mandatory !== false, origin: 'tool_override',
+    description: `Číselný výsledek odpovídá výsledku nástroje ${guard.plan.input} = ${guard.toolValue}.`,
+    verification: { kind: 'deterministic', type: 'number_equals', params: { expected: guard.toolValue, tolerance: 1e-6 } },
+  };
+}
+
+/** Textové pole kontraktu (jde do promptu): cizí čísla se přepíší na hodnotu nástroje, rozpor → nález. */
+function guardText(text, guard, field, findings) {
+  if (!guard || !text) return text;
+  const r = replaceNumbers(text, guard.foreign, guard.toolValue);
+  if (!r.replaced.length) return text;
+  const vals = [...new Set(r.replaced)];
+  findings.push(conflictFinding(guard, { field, modelValue: vals[0], modelValues: vals, resolution: `Čísla z modelu (${vals.join(', ')}) v poli „${field}“ přepsána na výsledek nástroje (${guard.toolValue}).` }));
+  return r.text;
+}
+
+/** Seznam (omezení, předpoklady, ne-cíle): položka s cizím číslem se vyřadí — přepis počtů („max 5 vět“) by byl nesmysl. */
+function guardList(items, guard, field, findings) {
+  if (!guard) return items;
+  const kept = [];
+  const dropped = [];
+  for (const it of items || []) (numbers(it).some(guard.foreign) ? dropped : kept).push(it);
+  if (dropped.length) {
+    const vals = [...new Set(dropped.flatMap((it) => numbers(it).filter(guard.foreign)))];
+    findings.push(conflictFinding(guard, { field, modelValue: vals[0], modelValues: vals, removedItems: dropped.length, resolution: `Položky pole „${field}“ s čísly z modelu (${vals.join(', ')}) vyřazeny (${dropped.length}).` }));
+  }
+  return kept;
+}
+
+function guardComponents(comp, guard, findings) {
+  if (!guard || !comp) return comp;
+  const out = { ...comp };
+  for (const k of Object.keys(out)) {
+    if (typeof out[k] === 'string') out[k] = guardText(out[k], guard, `components.${k}`, findings);
+    else if (Array.isArray(out[k])) out[k] = out[k].map((x) => (typeof x === 'string' ? guardText(x, guard, `components.${k}`, findings) : x));
+  }
+  return out;
+}
+
 function goalCriterion(statement) {
   return { id: 'GOAL-1', description: `Výsledek věcně naplňuje cíl kontraktu: „${statement}“.`, mandatory: true, verification: { kind: 'semantic', type: 'semantic', params: {} }, origin: 'system' };
 }
@@ -70,10 +164,16 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
   const b = basisData(branch.basis, { explicitGoal, gate0, audit });
   const plan = toolPlanFrom(gate0);
   const expectedFormat = plan && plan.fullySolves ? plan.outputFormat : audit.expectedOutput.format;
+  // Veto nástroje (hodnotitel 1.3.1): čísla z modelu, která nejsou výsledkem, mezivýsledkem ani v zadání, se do
+  // kontraktu nedostanou — v žádném kritériu ani textu, který jde do Execution Contract.
+  const guard = numberGuard(plan, [prompt, explicitGoal && explicitGoal.text, ...(clarifications || []).map((x) => x.answer)]);
+  const findings = [];
+  const statement = guardText(b.statement, guard, 'statement', findings);
+  const components = guardComponents(b.components, guard, findings);
   const criteria = [
-    ...b.criteria.map((c) => clone(c)),
+    ...b.criteria.map((c) => vetoCriterion(clone(c), guard, findings)),
     ...toolCriteria(plan),
-    goalCriterion(b.statement),
+    goalCriterion(statement),
     ...systemCriteria(expectedFormat, gate0.systemFacts.blockedOperations.map((o) => ({ ...o, literalSupport: o.literalSupport !== false }))),
   ];
   // jedinečná ID kritérií
@@ -83,7 +183,7 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
   const blocked = gate0.systemFacts.blockedOperations.map((o) => ({ operation: o.operation, category: o.category, literalSupport: o.literalSupport !== false }));
   const unavailable = gate0.systemFacts.unavailableCapabilities;
   const constraints = uniq([
-    ...(audit.constraints || []),
+    ...guardList(audit.constraints || [], guard, 'constraints', findings),
     'Výsledek nesmí vydávat předpoklady za ověřená fakta.',
     'Původní cíl nesmí být potichu změněn; odchylky je nutné výslovně vykázat.',
     ...(blocked.length ? [`Blokované operace se neprovádějí ani nevykazují jako splněné: ${blocked.map((o) => o.category).join(', ')}.`] : []),
@@ -102,8 +202,8 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
     evaluator: EVALUATOR_VERSION,
     role: branch.role,
     authority: branch.authority,
-    statement: b.statement,
-    components: b.components,
+    statement,
+    components,
     componentsSource: b.componentsSource,
     origin: {
       basis: branch.basis,
@@ -113,15 +213,17 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
       h1Statement: gate0.h1Goal.statement,
       auditStatement: audit.statement,
     },
-    expectedOutput: { format: expectedFormat, description: audit.expectedOutput.description },
-    scope: audit.scope || '',
-    nonGoals: uniq(audit.nonGoals),
+    expectedOutput: { format: expectedFormat, description: guardText(audit.expectedOutput.description, guard, 'expectedOutput.description', findings) },
+    scope: guardText(audit.scope || '', guard, 'scope', findings),
+    nonGoals: guardList(uniq(audit.nonGoals), guard, 'nonGoals', findings),
     constraints,
     successCriteria: criteria,
-    assumptions: uniq([...(audit.assumptions || []), ...gate0.aspects.flatMap((a) => a.assumptions || [])], 12),
+    assumptions: guardList(uniq([...(audit.assumptions || []), ...gate0.aspects.flatMap((a) => a.assumptions || [])], 12), guard, 'assumptions', findings),
     blockedOperations: blocked,
     unavailableCapabilities: unavailable,
     toolPlan: plan,
+    // Nálezy kontraktu (stav „proposed“): např. rozpor kritéria z modelu s výsledkem nástroje (veto nástroje).
+    findings,
     alternativeBranch: null,
   };
   return c;
@@ -157,4 +259,4 @@ function verifyContractHash(c) {
   return hashContract(c) === c.contentHash;
 }
 
-module.exports = { buildContracts, reviseContract, verifyContractHash, hashContract, SCHEMA_VERSION };
+module.exports = { buildContracts, reviseContract, verifyContractHash, hashContract, numberGuard, criterionForeignNumbers, SCHEMA_VERSION };

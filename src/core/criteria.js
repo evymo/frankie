@@ -8,6 +8,7 @@ const { validate } = require('./schema');
 const { extractJson, deepEqual, canonicalJson, truncate, normalizeForMatch } = require('./util');
 const { words } = require('../tools/textStats');
 const { runFunctionTests } = require('../tools/jsSandbox');
+const { finalNumber } = require('./numbers');
 
 function paramProblem(type, p = {}) {
   switch (type) {
@@ -171,11 +172,13 @@ async function runDeterministic(crit, result, ctx) {
       return m ? R('PASS', `Shoda: „${truncate(m[0], 120)}“.`) : R('FAIL', `Vzor /${params.pattern}/ nenalezen.`, 'Výstup neodpovídá vzoru.');
     }
     case 'number_equals': {
-      const n = lastNumber(text);
+      // Hodnotitel 1.3.1: ohlášený výsledek má přednost před posledním číslem (krok postupu „= 198“ nesmí
+      // zakrýt ohlášené „je 201“). Jeden výklad s orákl benchmarku: src/core/numbers.js.
+      const f = finalNumber(text);
       const tol = Number.isFinite(params.tolerance) ? params.tolerance : 1e-9;
-      if (n === null) return R('FAIL', 'Ve výstupu není žádné číslo.', 'Chybí číselný výsledek.');
-      return Math.abs(n - params.expected) <= tol ? R('PASS', `Poslední číslo ve výstupu ${n} = očekávaných ${params.expected}.`)
-        : R('FAIL', `Poslední číslo ve výstupu ${n} ≠ očekávaných ${params.expected}.`, `Rozdíl ${n - params.expected}.`);
+      if (!f) return R('FAIL', 'Ve výstupu není žádné číslo.', 'Chybí číselný výsledek.');
+      return Math.abs(f.value - params.expected) <= tol ? R('PASS', `Výsledné číslo ve výstupu ${f.value} (${f.how}) = očekávaných ${params.expected}.`)
+        : R('FAIL', `Výsledné číslo ve výstupu ${f.value} (${f.how}) ≠ očekávaných ${params.expected}.`, `Rozdíl ${f.value - params.expected}.`);
     }
     case 'max_words': case 'min_words': {
       const c = words(text).length;
