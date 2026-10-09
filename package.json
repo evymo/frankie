@@ -1,6 +1,6 @@
 {
   "name": "frankenstein",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "FRANKENSTEIN v0.4 — autonomní cyklus úlohy s adaptivním učením analytických hledisek (profil zadání, H-sestavy, Knowledge Base, řízené experimenty, živý průběh)",
   "private": true,
   "license": "UNLICENSED",

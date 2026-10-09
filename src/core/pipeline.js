@@ -28,7 +28,7 @@ const { diagnoseBranch, proposeHypotheses, compareExperiment, observationFor } =
 const { EVALUATOR_VERSION, evaluatorOf } = require('./evaluator');
 const T = require('../templates/analysis');
 
-const FR_VERSION = '0.4.2';
+const FR_VERSION = '0.4.3';
 
 const TRANSITIONS = {
   RECEIVED: ['PROFILE', 'FAILED'],
@@ -400,6 +400,8 @@ function stageReport(ctx) {
     evaluator: EVALUATOR_VERSION,
     branches,
     primaryVerdict: branches[0] ? branches[0].verdict : null,
+    // Nálezy kontraktu (např. veto nástroje proti hodnotě z modelu) — viditelné v reportu (hodnotitel 1.3.0).
+    contractFindings: run.contracts.flatMap((c) => (c.findings || []).map((f) => ({ contractId: c.id, ...f }))),
     simulated: ctx.provider.simulated,
     realityNote: ctx.provider.simulated
       ? 'SIMULACE: odpovědi modelu generoval deterministický mock provider. Algoritmické části (stavový automat, rozhodnutí, kompilace promptu, deterministické nástroje a kontroly, sandbox testy kódu) proběhly reálně.'

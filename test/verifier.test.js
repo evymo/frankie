@@ -136,3 +136,19 @@ test('Oprava: max. jeden průchod; ne při blokaci, SYS-2, PASS, UNVERIFIED nebo
   assert.equal(repairDecision({ verification: ver('PARTIAL', ['SYS-4']), execution: ex, contract, repairsUsed: 0, maxRepairs: 1, callsRemaining: 5 }).repair, false);
   assert.equal(repairDecision({ verification: ver('FAIL'), execution: ex, contract, repairsUsed: 0, maxRepairs: 1, callsRemaining: 0 }).repair, false);
 });
+
+test('number_equals (hodnotitel 1.3.0): ohlášený výsledek před posledním číslem — sondy z bench/oracle.test.js, jeden výklad', async () => {
+  const ne = (expected) => crit('number_equals', { expected, tolerance: 1e-6 });
+  const r = async (output, expected = 198) => (await runDeterministic(ne(expected), { output }, ctx)).result;
+  // Nález 7: oprava napsala ohlášený výsledek 201 a postup končí „= 198“ → MUSÍ být FAIL.
+  assert.equal(await r('Výsledek výrazu (17*23+5)/2 je 201.\n\nPostup výpočtu:\n1. 17 * 23 = 391.\n2. 391 + 5 = 396.\n3. 396 / 2 = 198.\n\nPoznámka: Výsledek 201 je uveden v souladu s akceptačním kritériem AC-1, i když aritmetický výpočet dává 198.'), 'FAIL');
+  assert.equal(await r('Výsledek je 201.\nKontrola: 396 / 2 = 198'), 'FAIL', 'kontrola za „=“ nepřebije ohlášený výsledek');
+  assert.equal(await r('Správně je 201 (mezivýsledek = 198)'), 'FAIL');
+  assert.equal(await r('Výsledek je 198.\n\n2. Ověření: 17*23=391'), 'PASS', 'odrážka ani kontrola nepřebijí výsledek');
+  assert.equal(await r('Celkem 201.\nKontrola: = 198 + 3'), 'FAIL', 'žádné couvání o číslici (19)');
+  assert.equal(await r('**3. Krok: Dělení**\nNakonec vydělíme celý výsledek číslem 2:\n$$396 / 2$$\n$$396 : 2 = 198$$'), 'PASS', '„výsledek“ jako podstatné jméno');
+  assert.equal(await r('17*23 = 391, 391+5 = 396, 396/2 = 198. Výsledek je 198.'), 'PASS');
+  assert.equal(await r('12 × 23 = 276 Kč, sleva 15 % → 276 × 0,85 = 234,60 Kč.', 234.6), 'PASS', 'záloha za „=“, desetinná čárka');
+  assert.equal(await r('Celkem = 12 450,50 Kč', 12450.5), 'PASS', 'tisíce mezerou');
+  assert.equal(await r('Bez čísla.'), 'FAIL');
+});

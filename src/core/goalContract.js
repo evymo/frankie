@@ -7,6 +7,7 @@ const { sha256, canonicalJson, deepFreeze, clone, nowIso } = require('./util');
 const { systemCriteria } = require('./criteria');
 const { EVALUATOR_VERSION } = require('./evaluator');
 const { runTool, TOOLS } = require('../tools');
+const { explicitResult } = require('./numbers');
 
 const SCHEMA_VERSION = 'goal-contract/1.0';
 
@@ -46,6 +47,51 @@ function toolCriteria(plan) {
   return [];
 }
 
+/**
+ * Doslovná hodnota VÝSLEDKU, kterou kritérium navržené modelem nese: number_equals, nebo popis s ohlášeným
+ * výsledkem („obsahuje správný výsledek 201“). Mezivýsledek („obsahuje 391“ bez ohlášení výsledku) se nebere.
+ */
+function literalResultOf(c) {
+  const v = c.verification || {};
+  const p = v.params || {};
+  if (v.type === 'number_equals' && Number.isFinite(Number(p.expected))) return Number(p.expected);
+  return explicitResult(c.description);
+}
+
+/** Je hodnota kritéria v rozporu s výsledkem nástroje? Vrací hodnotu z modelu, nebo null. */
+function toolConflictOf(c, plan) {
+  if (!plan || plan.tool !== 'arith_eval' || !Number.isFinite(plan.value)) return null;
+  if (c.origin === 'deterministic_tool' || c.origin === 'tool_override' || c.origin === 'system') return null;
+  const lit = literalResultOf(c);
+  if (lit === null) return null;
+  return Math.abs(lit - plan.value) <= 1e-6 * Math.max(1, Math.abs(plan.value)) ? null : lit;
+}
+
+/**
+ * Veto nástroje při vzniku kontraktu (hodnotitel 1.3.0, nález 7): kritérium z modelu s hodnotou výsledku v rozporu
+ * s nástrojem se do kontraktu nedostane — nahradí ho kontrola hodnoty nástroje a rozpor se zapíše jako nález
+ * kontraktu. Popis náhrady hodnotu z modelu NEnese (jde do Execution Contract), oprava tak nikdy nedostane pokyn
+ * splnit kontaminované kritérium. Hodnota z modelu zůstává jen v nálezu.
+ */
+function applyToolVeto(criteria, plan) {
+  const findings = [];
+  const out = criteria.map((c) => {
+    const lit = toolConflictOf(c, plan);
+    if (lit === null) return c;
+    findings.push({
+      type: 'tool_conflict', status: 'proposed', criterionId: c.id, criterionDescription: c.description, criterionOrigin: c.origin || null,
+      modelValue: lit, toolValue: plan.value, tool: plan.tool, toolInput: plan.input,
+      resolution: `Kritérium z modelu nahrazeno kontrolou výsledku nástroje (${plan.value}); hodnota z modelu (${lit}) se do kontraktu nedostala.`,
+    });
+    return {
+      id: c.id, mandatory: c.mandatory !== false, origin: 'tool_override',
+      description: `Číselný výsledek odpovídá výsledku nástroje ${plan.input} = ${plan.value}.`,
+      verification: { kind: 'deterministic', type: 'number_equals', params: { expected: plan.value, tolerance: 1e-6 } },
+    };
+  });
+  return { criteria: out, findings };
+}
+
 function goalCriterion(statement) {
   return { id: 'GOAL-1', description: `Výsledek věcně naplňuje cíl kontraktu: „${statement}“.`, mandatory: true, verification: { kind: 'semantic', type: 'semantic', params: {} }, origin: 'system' };
 }
@@ -70,8 +116,9 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
   const b = basisData(branch.basis, { explicitGoal, gate0, audit });
   const plan = toolPlanFrom(gate0);
   const expectedFormat = plan && plan.fullySolves ? plan.outputFormat : audit.expectedOutput.format;
+  const veto = applyToolVeto(b.criteria.map((c) => clone(c)), plan);
   const criteria = [
-    ...b.criteria.map((c) => clone(c)),
+    ...veto.criteria,
     ...toolCriteria(plan),
     goalCriterion(b.statement),
     ...systemCriteria(expectedFormat, gate0.systemFacts.blockedOperations.map((o) => ({ ...o, literalSupport: o.literalSupport !== false }))),
@@ -122,6 +169,8 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
     blockedOperations: blocked,
     unavailableCapabilities: unavailable,
     toolPlan: plan,
+    // Nálezy kontraktu (stav „proposed“): např. rozpor kritéria z modelu s výsledkem nástroje (veto nástroje).
+    findings: veto.findings,
     alternativeBranch: null,
   };
   return c;
@@ -157,4 +206,4 @@ function verifyContractHash(c) {
   return hashContract(c) === c.contentHash;
 }
 
-module.exports = { buildContracts, reviseContract, verifyContractHash, hashContract, SCHEMA_VERSION };
+module.exports = { buildContracts, reviseContract, verifyContractHash, hashContract, toolConflictOf, literalResultOf, SCHEMA_VERSION };

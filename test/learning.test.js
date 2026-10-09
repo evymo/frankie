@@ -233,12 +233,12 @@ test('E — SYS-4 z operace vymyšlené modelem (PASSPORT §6.1): hodnotitel ≥
   g.requestedOperations = [{ operation: 'zapsat soubory do pracovního adresáře', category: 'filesystem_write' }];
   const { run } = await runMock({ prompt, script: { gate0: g } });
   const c = run.contracts[0];
-  assert.equal(c.evaluator, '1.2.0');
+  assert.equal(c.evaluator, '1.3.0');
   assert.equal(c.blockedOperations[0].literalSupport, false);
   const sys4 = c.successCriteria.find((x) => x.id === 'SYS-4');
   assert.equal(sys4.mandatory, false);
   const v = run.branches[0].attempts.at(-1).verification;
-  assert.equal(v.evaluator, '1.2.0');
+  assert.equal(v.evaluator, '1.3.0');
   assert.notEqual(v.verdict, 'PARTIAL', 'SYS-4 bez opory verdikt neshodí');
   const item = run.learning.diagnosis[0].items.find((i) => i.criterionId === 'SYS-4');
   assert.equal(item.cause, 'evaluator_suspect');
@@ -411,4 +411,33 @@ test('G — STOP a BILLING_GUARD: učení přeskočeno / blokace viditelná v pr
   assert.equal(run.state, 'CLARIFICATION_REQUIRED');
   assert.ok(run.events.some((e) => e.step === 'CLARIFICATION_REQUIRED' && e.status === 'stopped'));
   assert.ok(run.events.some((e) => e.step === 'LEARN' && e.status === 'skipped'));
+});
+
+test('Diagnóza (hodnotitel 1.3.0, nález 7): reálné selhání při rozporu kontraktu s nástrojem se nepřipíše H-sestavě', () => {
+  const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
+  const toolPlan = { tool: 'arith_eval', input: '(17*23+5)/2', value: 198, fullySolves: false };
+  const contract = (findings, extra = []) => ({ id: 'GC-T', successCriteria: [
+    { id: 'TOOL-1', mandatory: true, origin: 'deterministic_tool', verification: { type: 'number_equals', params: { expected: 198 } } },
+    { id: 'GOAL-1', mandatory: true, origin: 'system', verification: { type: 'semantic', params: {} } }, ...extra],
+    toolPlan, findings, blockedOperations: [], unavailableCapabilities: [] });
+  const runOf = (c, rows) => ({ input: { prompt: 'Vypočítej (17*23+5)/2 a vysvětli postup.' }, provider: { simulated: false }, gate0: { aspects: [] }, contracts: [c],
+    branches: [{ id: 'B1', contractId: c.id, attempts: [{ execution: { status: 'completed', output: 'Výsledek je 201.' }, verification: { verdict: 'PARTIAL', criteria: rows } }] }] });
+  const rows = [{ criterionId: 'TOOL-1', mandatory: true, result: 'PASS' }, { criterionId: 'GOAL-1', mandatory: true, result: 'FAIL', simulated: false }];
+  // Kontrakt s nálezem rozporu (veto nástroje): sémantické FAIL jde na vrub kontraktu, ne strategie.
+  const conflict = [{ type: 'tool_conflict', status: 'proposed', criterionId: 'AC-1', modelValue: 201, toolValue: 198 }];
+  const run = runOf(contract(conflict), rows);
+  const d = diagnoseBranch({ run, branch: run.branches[0] });
+  assert.equal(d.items.find((i) => i.criterionId === 'GOAL-1').cause, 'contract_tool_conflict');
+  assert.equal(d.hFeedback, false);
+  assert.equal(d.contractConflict, true);
+  assert.deepEqual(proposeHypotheses({ diagnoses: [d], profile: { features: { kind: 'math', artifact: 'number', constraints: [], language: 'cs' } }, aspectSet: { id: 'HS-default', version: 1, aspects: [], floors: {} }, gate0: null, runId: 'RUN-T', simulated: false }), []);
+  // Obrana i bez nálezu: kritérium nesoucí výsledek v rozporu s nástrojem (např. z dřívějšího kontraktu).
+  const legacy = runOf(contract([], [{ id: 'AC-1', mandatory: true, origin: 'audit_model', description: 'Obsahuje správný číselný výsledek 201.', verification: { type: 'contains', params: { text: '201' } } }]),
+    [{ criterionId: 'AC-1', mandatory: true, result: 'FAIL', simulated: false }]);
+  const d2 = diagnoseBranch({ run: legacy, branch: legacy.branches[0] });
+  assert.equal(d2.items[0].cause, 'contract_tool_conflict');
+  assert.equal(d2.hFeedback, false);
+  // Kontrola: bez rozporu je stejné sémantické FAIL interpretace/strategie (test není prázdný).
+  const clean = runOf(contract([]), rows);
+  assert.equal(diagnoseBranch({ run: clean, branch: clean.branches[0] }).hFeedback, true);
 });

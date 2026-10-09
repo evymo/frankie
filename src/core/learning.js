@@ -13,6 +13,7 @@ const { ASPECT_CATALOG } = require('./aspects');
 const { deriveSet, describeChange } = require('./aspectSets');
 const { detectLanguage } = require('./profile');
 const { evaluatorOf } = require('./evaluator');
+const { toolConflictOf } = require('./goalContract');
 
 const CAUSES = {
   permission_or_capability: { label: 'oprávnění / nedostupná schopnost', hFeedback: false },
@@ -21,6 +22,7 @@ const CAUSES = {
   evaluator_suspect: { label: 'podezření na vadu hodnotitele', hFeedback: false },
   evaluation_unavailable: { label: 'ověření neproběhlo', hFeedback: false },
   simulation: { label: 'simulace (mock) — není důkaz', hFeedback: false },
+  contract_tool_conflict: { label: 'rozpor kontraktu s nástrojem (kontrakt / verifikace)', hFeedback: false },
   interpretation_or_strategy: { label: 'interpretace / analytická strategie', hFeedback: true },
 };
 
@@ -39,12 +41,21 @@ function criticalMissing(gate0) {
   return (gate0 && gate0.aspects || []).filter((a) => ['H3', 'H4'].includes(a.id)).flatMap((a) => (a.missingInfo || []).filter((m) => m.critical).map((m) => m.item));
 }
 
+function hasToolConflict(contract) {
+  return (contract.findings || []).some((f) => f.type === 'tool_conflict');
+}
+
 function causeOf(row, { contract, execution, gate0 }) {
   const crit = contract.successCriteria.find((x) => x.id === row.criterionId);
   const type = crit ? crit.verification.type : 'semantic';
   const R = (cause, reason) => ({ cause, reason, type });
   if (execution.status === 'error') return R('execution_error', `Exekuce selhala: ${execution.error || 'bez výsledku'}.`);
   if (row.criterionId === 'SYS-2') return R('execution_error', 'Vykonávací model vykázal blokovanou operaci (SYS-2) — bezpečnostní problém pro člověka, ne pro H-sestavu.');
+  // Hodnotitel 1.3.0 (nález 7): kontrakt kontaminovaný hodnotou z modelu v rozporu s nástrojem → příčina je v kontraktu
+  // nebo verifikaci, ne v analytické strategii; učení z takového běhu H-sestavu nemění.
+  if (hasToolConflict(contract) || (crit && toolConflictOf(crit, contract.toolPlan) !== null)) {
+    return R('contract_tool_conflict', 'Kontrakt nesl kritérium z modelu v rozporu s výsledkem nástroje — příčina je v kontraktu / verifikaci, ne v H-sestavě.');
+  }
   if (type === 'blocked_scope') {
     const ops = contract.blockedOperations || [];
     if (ops.length && ops.every((o) => o.literalSupport === false)) return R('evaluator_suspect', 'SYS-4: blokovaná operace nemá doslovnou oporu v zadání — známé falešné hodnocení (PASSPORT v0.3.1 §6.1).');
@@ -82,15 +93,17 @@ function diagnoseBranch({ run, branch }) {
   const mandatoryItems = items.filter((i) => i.mandatory);
   const counts = {};
   for (const i of mandatoryItems) counts[i.cause] = (counts[i.cause] || 0) + 1;
-  const hFeedback = mandatoryItems.some((i) => CAUSES[i.cause].hFeedback);
+  const contractConflict = hasToolConflict(contract) || items.some((i) => i.cause === 'contract_tool_conflict');
+  const hFeedback = mandatoryItems.some((i) => CAUSES[i.cause].hFeedback); // rozpor kontraktu má vlastní příčinu bez H
   let summary;
-  if (verification.verdict === 'PASS') summary = 'Všechna povinná kritéria splněna.';
+  if (contractConflict) summary = `Rozpor kontraktu s výsledkem nástroje (${(contract.findings || []).filter((f) => f.type === 'tool_conflict').map((f) => `${f.criterionId}: model ${f.modelValue} × nástroj ${f.toolValue}`).join('; ') || 'kritérium v rozporu s nástrojem'}) — příčina v kontraktu / verifikaci; H-sestavě se nepřipisuje a z běhu se nenavrhuje změna H.`;
+  else if (verification.verdict === 'PASS') summary = 'Všechna povinná kritéria splněna.';
   else if (!mandatoryItems.length) summary = 'Povinná kritéria bez odchylky; odchylky jen u volitelných.';
   else if (hFeedback) summary = `Část odchylek připisuje FR interpretaci / analytické strategii (${signals.map((s) => SIGNAL_LABEL[s]).join(', ') || 'bez specifického signálu'}); ostatní příčiny H-sestavě nepřipisuje.`;
   else summary = `Odchylky mají vnější příčinu (${Object.keys(counts).map((k) => CAUSES[k].label).join(', ')}) — H-sestavě se nepřipisují.`;
   return {
     branchId: branch.id, contractId: contract.id, verdict: verification.verdict, evaluator: evaluatorOf(verification),
-    evidenceGrade: simulated ? 'simulated' : 'real', items, counts, hFeedback, signals, language, summary,
+    evidenceGrade: simulated ? 'simulated' : 'real', items, counts, hFeedback, contractConflict, signals, language, summary,
   };
 }
 
@@ -112,6 +125,8 @@ function applicabilityFor(profile, signal) {
  */
 function proposeHypotheses({ diagnoses, profile, aspectSet, gate0, runId, simulated }) {
   const out = [];
+  // Kontaminovaný kontrakt (rozpor s nástrojem): ani obohacení, ani redukce — výsledek běhu o H-sestavě nic nedokládá.
+  if (diagnoses.some((d) => d.contractConflict)) return out;
   const seen = new Set();
   const origin = { runId, simulated: !!simulated, causes: diagnoses.flatMap((d) => d.items.filter((i) => i.mandatory).map((i) => i.cause)) };
   const push = (kind, change, signal, rationale) => {

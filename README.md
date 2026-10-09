@@ -219,7 +219,8 @@ src/core/profile.js        charakteristika zadání (bez AI) a kvalitativní sho
 src/core/aspectSets.js     verzované H-sestavy; invarianty systémových garancí H1/H7/H8/H9
 src/core/knowledge.js      sdílená Knowledge Base (knowledge/, append-only), výběr sestavy, stavy důvěryhodnosti
 src/core/learning.js       diagnóza příčin, kandidátní hypotézy, řízené srovnání
-src/core/evaluator.js      verze hodnotitele s historií (1.2.0: výsledek nástroje povinný vždy)
+src/core/evaluator.js      verze hodnotitele s historií (1.2.0: výsledek nástroje povinný vždy; 1.3.0: veto nástroje v kontraktu)
+src/core/numbers.js        jeden výklad výsledného čísla (verifikátor number_equals i orákl bench/)
 src/core/gate0.js          Gate 0 — 1 AI volání pro H1–H10 + deterministické úpravy priorit, ověření citací, H7/H8 z konfigurace
 src/core/detectors.js      explicitní cíl, prompt injection, citlivá data, operace mimo oprávnění (regex, bez AI)
 src/core/goalAudit.js      Goal Audit (izolované volání bez H1) + kvalitativní porovnání s evidencí původu
@@ -271,6 +272,19 @@ inference. Jádro podle backendu nevětví.
     ani zdvojeného). Úplnou shodu s převodem vyžaduje jen úplné řešení.
 
   Nástroj ale zatím nemá veto. Když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
+- **Hodnotitel 1.3.0 (v0.4.3, nález 7 z benchmarku):**
+  - **Veto nástroje při vzniku kontraktu.** Když kritérium navržené modelem nese hodnotu výsledku v rozporu
+    s nástrojem (např. „obsahuje správný výsledek 201“ × `arith_eval` 198), do kontraktu se nedostane. Nahradí ho
+    kontrola hodnoty nástroje a rozpor se zapíše jako nález kontraktu (`contract.findings`, `report.contractFindings`,
+    stav `proposed`). Oprava tak nikdy nedostane pokyn splnit kontaminované kritérium. Na v0.4.2 tímhle FR zkazil
+    správnou odpověď 198 → 201.
+  - **`number_equals` bere ohlášený výsledek** („výsledek / odpověď / celkem / správně je …“) před posledním číslem,
+    takže „je 201 … i když výpočet dává 198“ je FAIL. Výklad je jeden, v `src/core/numbers.js`, a sdílí ho i orákl
+    benchmarku.
+  - **Diagnóza:** rozpor kontraktu s nástrojem je příčina „kontrakt / verifikace“, sadě hledisek se nepřipisuje a
+    z takového běhu nevzniká hypotéza, ani redukce.
+  - Veto nad celkovým verdiktem to není: selhaná kontrola nástroje při ostatních splněných kritériích dál dává
+    `PARTIAL`.
 - **Úplnost u filtrovaného CSV není hlídaná:** odpověď, které chybí řádek splňující filtr (např. chybí Cyril), projde
   kontrolou nástroje. Řešení (kritérium s cestou, typované kontroly) je naplánované do M-FR1.
 - Číselná kontrola (`number_equals`) bere **poslední číslo** výstupu. Odpověď, která uvede výsledek před postupem,
