@@ -14,7 +14,7 @@ reálnou inferenci, kterou zatím nikdo neautorizoval. Mock dokládá jen **tok*
 |---|---|---|
 | Profil zadání (bez AI) | kategorická charakteristika: povaha, artefakt, jazyk, omezení, kontext, ověřitelnost, schopnosti, rizika | OVĚŘENO testy |
 | H-sestavy | verzované, hashované kombinace hledisek; systémové garance H1/H7/H8/H9 nelze odebrat ani oslabit | OVĚŘENO testy |
-| Výběr sestavy | z lokální Knowledge Base; aktivně jen **ověřená** zkušenost se silnou shodou charakteristiky | OVĚŘENO testy (na syntetické fixture KB) |
+| Výběr sestavy | ze sdílené Knowledge Base (`knowledge/`); aktivně jen **ověřená** zkušenost se silnou shodou charakteristiky | OVĚŘENO testy (na syntetické fixture KB) |
 | Vliv na prompt | sestava mění otázky Gate 0 a sekci priorit Execution Contract; stopa `aspectTrace` | OVĚŘENO testy |
 | Diagnóza | 7 tříd příčin; H-sestavě se připisuje jen „interpretace / analytická strategie“ | OVĚŘENO testy |
 | Hypotézy | kandidátní změna sestavy (1 změna), z katalogu HX-*; redukce jen z reálného úspěchu | OVĚŘENO testy |
@@ -121,8 +121,14 @@ Z neúspěchu se nikdy neusuzuje, že všechna H byla špatná: hypotéza navrhu
 - Opakovaný návrh téže hypotézy se jen eviduje (`proposals`), důvěru nezvyšuje.
 
 ### 3.6 Knowledge Base (`src/core/knowledge.js`)
-- Soubor `data/kb/fr-kb.json` (adresář `data/` je v `.gitignore` → **nikdy do veřejného Gitu**), atomický zápis,
-  schéma `fr-kb/1` s migrací; neznámá verze = fail-closed (KB se nepoužije ani nepřepíše, běh pokračuje s výchozí sestavou).
+- **Sdílená v repozitáři** (v0.4.1): adresář [`knowledge/`](../knowledge/README.md), schéma `fr-kb/2`, **jeden soubor na
+  záznam, append-only** (sets, recommendations, proposals, experiences, comparisons, observations). Stav důvěryhodnosti se
+  neukládá, dopočítá se při načtení; nezávisle vzniklá doporučení se stejným klíčem se sloučí → týmová práce přes
+  `git pull/push` bez konfliktů. FR znovu načte KB před každým během (zkušenosti kolegů po `git pull`).
+- Repozitář je veřejný: experience se před uložením očistí (`sanitizeExperience` — bez hashe zadání). Plné záznamy běhů
+  (`data/runs`, prompty a odpovědi) zůstávají mimo veřejný Git.
+- Dřívější lokální `data/kb/fr-kb.json` (`fr-kb/1`, v0.4.0) se při startu serveru jednorázově převede; původní soubor zůstává.
+- Neznámá verze manifestu = fail-closed (KB se nepoužije ani nepřepíše, běh pokračuje s výchozí sestavou).
 - Ukládá: profil (kategorie), H-sestavy, zkušenost (verdikty, ID kritérií, typy kontrol, třídy příčin, stopa sestavy,
   náklady), doporučení, srovnání, pozorování. **Neukládá** text zadání ani výstupy — jen SHA-256 zadání a ID běhů.
   Přenáší se metoda, nikoli fakta z cizí úlohy.
@@ -163,11 +169,11 @@ Konfigurace (`config/fr.config.json → learning`): `enabled`, `verifyMinWins` (
 
 ## 6. Co je ověřeno a co ne
 
-**Deterministické testy (OVĚŘENO):** 91/91 (`start.cmd test`) — původních 72 beze změny + 19 nových
+**Deterministické testy (OVĚŘENO):** 93/93 (`start.cmd test`) — původních 72 beze změny + 21 nových
 (`test/learning.test.js`, `test/server.test.js`): body B–H zadání (výchozí sestava bez zkušeností; kandidát z diagnózy
 a srovnání proti témuž zamčenému kontraktu; nalezení a skutečný vliv ověřené sestavy na Gate 0 i Execution Contract;
 nesouvisející úloha ji nepřevezme; jediný úspěch se jen doporučí; oprávnění/hodnotitel se nepřipíše H-sestavě; mock se
-nezapočítá; reálný experiment bez povolení a potvrzení odmítnut bez jediného volání; KB lokálně a bez textů; události
+nezapočítá; reálný experiment bez povolení a potvrzení odmítnut bez jediného volání; KB v repozitáři po záznamech a bez textů / hashů zadání, sloučení záznamů kolegů, převod staré KB; události
 živě i po znovuotevření).
 
 **Rozdíl mezi testem toku a důkazem účinnosti:** testy dokazují, že mechanismus funguje (výběr, vazba na prompt, evidence,

@@ -146,7 +146,7 @@ test('Server v0.4: živé události, KB přehled, experiment přes API (mock ano
   let baseId;
   try {
     const st = await req(port, 'GET', '/api/status');
-    assert.equal(st.json.version, '0.4.0');
+    assert.equal(st.json.version, '0.4.1');
     assert.deepEqual(st.json.coreAspects, ['H1', 'H7', 'H8', 'H9']);
     assert.equal(st.json.evaluator.version, '1.1.0');
     assert.equal(st.json.learning.realExperiments.enabled, false);
@@ -173,7 +173,8 @@ test('Server v0.4: živé události, KB přehled, experiment přes API (mock ano
     assert.equal(kb.status, 200);
     assert.equal(kb.json.counts.recommendations, 1);
     assert.equal(kb.json.recommendations[0].status, 'candidate');
-    assert.ok(fs.existsSync(path.join(dataDir, 'kb', 'fr-kb.json')), 'KB je lokální soubor v data/kb');
+    assert.ok(fs.existsSync(path.join(dataDir, 'knowledge', 'kb.json')), 'KB = adresář knowledge/ (u testů v dočasném dataDir)');
+    assert.ok(fs.readdirSync(path.join(dataDir, 'knowledge', 'recommendations')).length === 1, 'jeden soubor na záznam');
 
     // experiment s jiným providerem než původní běh je odmítnut (srovnání by neměnilo jen H-sestavu)
     const denied = await req(port, 'POST', '/api/experiments', { baseRunId: base.id, recommendationId: recId, provider: 'claude-cli', confirmRealCalls: true });

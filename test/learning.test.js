@@ -286,27 +286,105 @@ test('H — reálný experiment bez povolení v konfiguraci a bez potvrzení je 
   assert.throws(() => planExperiment({ baseRun: base, kb, config: cfg, provider: other, recommendationId: recId, confirmRealCalls: true }), /stejný provider/);
 });
 
-test('KB: lokální soubor, bez textu zadání, přežije znovunačtení; neznámá verze = fail-closed bez pádu běhu', async () => {
+/** Celý obsah adresáře KB jako text (pro kontrolu, že do veřejného repa nejde nic citlivého). */
+function dirText(d) {
+  if (!fs.existsSync(d)) return '';
+  return fs.readdirSync(d, { withFileTypes: true }).map((e) => (e.isDirectory() ? dirText(path.join(d, e.name)) : fs.readFileSync(path.join(d, e.name), 'utf8'))).join('\n');
+}
+
+test('KB v repozitáři: jeden soubor na záznam, bez textu zadání, výstupu i hashe zadání; přežije znovunačtení; neznámá verze = fail-closed', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-kb-'));
-  const file = path.join(dir, 'kb', 'fr-kb.json');
+  const kdir = path.join(dir, 'knowledge');
   try {
-    const kb = new KnowledgeBase({ file, config: testConfig() });
-    await runMock({ prompt: SUMMARY_PROMPT, script: { execute: LONG_SUMMARY }, kb });
-    const raw = fs.readFileSync(file, 'utf8');
+    const kb = new KnowledgeBase({ dir: kdir, config: testConfig() });
+    const { run } = await runMock({ prompt: SUMMARY_PROMPT, script: { execute: LONG_SUMMARY }, kb });
+    for (const k of ['kb.json', 'experiences', 'recommendations', 'proposals', 'sets']) assert.ok(fs.existsSync(path.join(kdir, k)), k);
+    const raw = dirText(kdir);
     assert.ok(!raw.includes('Vltavě'), 'KB neobsahuje text zadání');
     assert.ok(!raw.includes('slovo slovo'), 'KB neobsahuje výstup');
-    const again = new KnowledgeBase({ file, config: testConfig() });
+    assert.ok(!raw.includes(run.input.promptSha256), 'KB neobsahuje hash zadání');
+    const again = new KnowledgeBase({ dir: kdir, config: testConfig() });
     assert.equal(again.data.recommendations.length, 1);
     assert.equal(again.data.experiences.length, 1);
+    assert.equal(again.data.recommendations[0].status, 'candidate', 'stav se dopočítá, neukládá');
+    // záznamy se nepřepisují
+    const recFile = fs.readdirSync(path.join(kdir, 'recommendations'))[0];
+    const before = fs.readFileSync(path.join(kdir, 'recommendations', recFile), 'utf8');
+    await runMock({ prompt: SUMMARY_PROMPT, script: { execute: LONG_SUMMARY }, kb: again });
+    assert.equal(fs.readFileSync(path.join(kdir, 'recommendations', recFile), 'utf8'), before);
+    assert.equal(fs.readdirSync(path.join(kdir, 'proposals')).length, 2, 'opakovaný návrh = nový záznam návrhu');
 
-    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 'fr-kb/99' }));
-    const broken = new KnowledgeBase({ file, config: testConfig() });
+    fs.writeFileSync(path.join(kdir, 'kb.json'), JSON.stringify({ schemaVersion: 'fr-kb/99' }));
+    const broken = new KnowledgeBase({ dir: kdir, config: testConfig() });
     assert.equal(broken.available(), false);
-    const { run } = await runMock({ prompt: SUMMARY_PROMPT, kb: broken });
-    assert.equal(run.state, 'DONE');
-    assert.equal(run.learning.selection.mode, 'default');
-    assert.equal(run.learning.kbUpdate.saved, false);
-    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).schemaVersion, 'fr-kb/99', 'neznámá verze se nepřepíše');
+    const { run: r2 } = await runMock({ prompt: SUMMARY_PROMPT, kb: broken });
+    assert.equal(r2.state, 'DONE');
+    assert.equal(r2.learning.selection.mode, 'default');
+    assert.equal(r2.learning.kbUpdate.saved, false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(kdir, 'kb.json'), 'utf8')).schemaVersion, 'fr-kb/99', 'neznámá verze se nepřepíše');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('KB kolegů: nezávisle vzniklé záznamy se po „git pull“ (sloučení adresářů) spojí bez konfliktu a důkazy se sečtou', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-kb-team-'));
+  const A = path.join(dir, 'a');
+  const B = path.join(dir, 'b');
+  try {
+    const ka = new KnowledgeBase({ dir: A, config: testConfig() });
+    const kbb = new KnowledgeBase({ dir: B, config: testConfig() });
+    // stejná hypotéza vznikla u dvou lidí, každý má 1 reálné srovnání
+    const ra = seedRecommendation(ka, { wins: 1 }).rec;
+    const rb = seedRecommendation(kbb, { wins: 1 }).rec;
+    ka.save(); kbb.save();
+    assert.notEqual(ra.id, rb.id);
+    assert.equal(ka.recommendation(ra.id).status, 'supported');
+    // „git pull“: soubory B se přidají k A (různé názvy souborů → žádný konflikt)
+    for (const kind of fs.readdirSync(B)) {
+      const src = path.join(B, kind);
+      if (!fs.statSync(src).isDirectory()) continue;
+      for (const f of fs.readdirSync(src)) {
+        const dst = path.join(A, kind, f);
+        if (kind === 'sets' && fs.existsSync(dst)) { assert.equal(fs.readFileSync(dst, 'utf8'), fs.readFileSync(path.join(src, f), 'utf8'), 'sestavy jsou adresované obsahem — stejný soubor'); continue; }
+        assert.ok(!fs.existsSync(dst), 'žádná kolize názvů');
+        fs.copyFileSync(path.join(src, f), dst);
+      }
+    }
+    ka.reload();
+    assert.equal(ka.data.recommendations.length, 1, 'stejný klíč = jedno doporučení');
+    const merged = ka.recommendation(rb.id);
+    assert.equal(merged.id, ka.recommendation(ra.id).id, 'alias na nejstarší záznam');
+    assert.equal(merged.status, 'verified', '2 nezávislá reálná srovnání');
+    assert.equal(merged.proposals.length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('KB: převod dřívějšího data/kb/fr-kb.json (fr-kb/1) do knowledge/ — očištěně, původní soubor beze změny', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-kb-mig-'));
+  try {
+    const legacy = path.join(dir, 'kb', 'fr-kb.json');
+    fs.mkdirSync(path.dirname(legacy), { recursive: true });
+    const cand = deriveSet(DEFAULT_SET, { remove: ['H10'] }, {});
+    const old = {
+      schemaVersion: 'fr-kb/1', aspectSets: { [cand.id]: cand },
+      experiences: [{ id: 'EXP-1', at: '2026-10-09T04:02:26.000Z', runId: 'RUN-1', promptSha256: 'a'.repeat(64), profile: {} }],
+      recommendations: [{ id: 'REC-OLD-1', key: 'k1', version: 1, kind: 'reduction', change: { remove: ['H10'] }, changeText: 'odebrat H10', baseSet: { id: 'HS-default', version: 1, hash: DEFAULT_SET.hash }, candidateSet: { id: cand.id, version: 1, hash: cand.hash }, applicability: { key: { kind: 'math', artifact: 'number' }, requires: {} }, originProfile: profileTask({ prompt: 'Vypočítej 2+3' }).features, rationale: 'x', origin: { runId: 'RUN-1', simulated: false }, proposals: [{ at: '2026-10-09T04:02:26.000Z', runId: 'RUN-1', simulated: false }], evidence: { comparisons: [], observations: [] }, status: 'candidate', createdAt: '2026-10-09T04:02:26.000Z' }],
+      comparisons: [], log: [],
+    };
+    fs.writeFileSync(legacy, JSON.stringify(old));
+    const { createServer } = require('../src/server');
+    const { server, kb, kbMigration } = createServer({ config: testConfig(), dataDir: dir, providers: { mock: new MockProvider() } });
+    server.close();
+    assert.ok(kbMigration && kbMigration.saved);
+    assert.equal(kb.recommendation('REC-OLD-1').changeText, 'odebrat H10');
+    assert.equal(kb.data.experiences.length, 1);
+    assert.ok(!dirText(path.join(dir, 'knowledge')).includes('a'.repeat(64)), 'hash zadání se nepřevádí');
+    assert.deepEqual(JSON.parse(fs.readFileSync(legacy, 'utf8')), old, 'původní soubor beze změny');
+    const { kbMigration: again } = createServer({ config: testConfig(), dataDir: dir, providers: { mock: new MockProvider() } });
+    assert.equal(again, null, 'převod proběhne jen jednou');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

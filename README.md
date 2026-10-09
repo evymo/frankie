@@ -4,7 +4,7 @@ Lokální prototyp agenta, který zadání analyzuje podle deseti hledisek, nez�
 rozhodne podle pravidel A/B/C/D, vytvoří neměnný Goal Contract, algoritmicky sestaví exekuční prompt,
 převezme výsledek, ověří ho proti akceptačním kritériím a vykáže telemetrii.
 
-**v0.4:** FR určí charakteristiku zadání (bez AI), podle doložených zkušeností z lokální Knowledge Base zvolí analytickou
+**v0.4:** FR určí charakteristiku zadání (bez AI), podle doložených zkušeností ze sdílené Knowledge Base (`knowledge/`) zvolí analytickou
 sestavu hledisek (H-sestavu), diagnostikuje odchylky (oprávnění / vstupy / exekuce / hodnotitel / strategie), navrhuje
 kandidátní změny sestavy a ověřuje je řízeným srovnáním proti témuž zamčenému Goal Contract. Aktivně se použije jen
 opakovaně ověřená zkušenost; systémové garance H1/H7/H8/H9 se nikdy neučí. UI ukazuje živý průběh práce a modře
@@ -48,7 +48,7 @@ bez jediného volání.
 src/core/pipeline.js       FR Core — stavový automat, limity, zámek 1 běhu, orchestrace, události průběhu (run.events)
 src/core/profile.js        v0.4: charakteristika zadání (bez AI) a kvalitativní shoda profilů
 src/core/aspectSets.js     v0.4: verzované H-sestavy; invarianty systémových garancí H1/H7/H8/H9
-src/core/knowledge.js      v0.4: lokální Knowledge Base (data/kb), výběr sestavy, stavy důvěryhodnosti
+src/core/knowledge.js      v0.4: sdílená Knowledge Base (knowledge/, append-only), výběr sestavy, stavy důvěryhodnosti
 src/core/learning.js       v0.4: diagnóza příčin, kandidátní hypotézy, řízené srovnání
 src/core/evaluator.js      v0.4: verze hodnotitele s historií (SYS-4 1.1.0)
 src/core/gate0.js          Gate 0 — 1 AI volání pro H1–H10 + deterministické úpravy priorit, ověření citací, H7/H8 z konfigurace
@@ -75,7 +75,8 @@ Stavový automat: `RECEIVED → PROFILE → GATE0 → GOAL_AUDIT → GOAL_COMPAR
 
 ## Učení (v0.4) — provoz
 
-- Knowledge Base je **jen lokálně** v `data/kb/fr-kb.json` (není v Gitu) a obsahuje metodu, ne texty zadání.
+- Knowledge Base je **sdílená v repozitáři** v [`knowledge/`](knowledge/README.md) (jeden soubor na záznam, týmová práce
+  přes `git pull/push`). Obsahuje jen metodu — ne texty zadání, výstupy ani hash zadání. Plné běhy (`data/runs`) zůstávají mimo Git.
 - Simulované (mock) experimenty jsou povolené vždy a do důvěryhodnosti se nezapočítávají.
 - Reálný experiment (3–5 volání Claude CLI) vyžaduje `learning.realExperiments.enabled: true` v `config/fr.config.json`
   **a** potvrzení v UI; denní limit `maxPerDay`. Ve výchozím stavu vypnuto.

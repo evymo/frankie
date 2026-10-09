@@ -27,7 +27,7 @@ const { diagnoseBranch, proposeHypotheses, compareExperiment, observationFor } =
 const { EVALUATOR_VERSION, evaluatorOf } = require('./evaluator');
 const T = require('../templates/analysis');
 
-const FR_VERSION = '0.4.0';
+const FR_VERSION = '0.4.1';
 
 const TRANSITIONS = {
   RECEIVED: ['PROFILE', 'FAILED'],
@@ -223,6 +223,7 @@ function stageProfile(ctx) {
   } else if (!learningOn) {
     sel = { mode: 'default', set: DEFAULT_SET, appliedRecommendationId: null, candidates: [], reason: 'Učení je v konfiguraci vypnuto — výchozí sestava.' };
   } else {
+    ctx.kb.reload(); // zkušenosti kolegů mohly přibýt (git pull)
     sel = ctx.kb.select(profile, { mode: run.input.options.learningMode });
   }
   ctx.aspectSet = sel.set;

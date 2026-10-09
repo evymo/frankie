@@ -2,7 +2,7 @@
 /**
  * Lokální HTTP server FRANKENSTEIN (jen 127.0.0.1). Bez závislostí.
  * API: stav, preflight, spuštění běhu (zámek = max. 1 běh), detail/historie, export JSON a exekučních promptů,
- * v0.4: přehled lokální Knowledge Base a řízený experiment H-sestavy (spouští jen uživatel).
+ * v0.4: přehled sdílené Knowledge Base (knowledge/) a řízený experiment H-sestavy (spouští jen uživatel).
  */
 const http = require('http');
 const fs = require('fs');
@@ -19,12 +19,21 @@ const { RULES } = require('./core/decision');
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8' };
 
-function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data'), providers } = {}) {
+const DEFAULT_DATA_DIR = path.join(ROOT, 'data');
+
+function createServer({ config = loadConfig(), dataDir = DEFAULT_DATA_DIR, knowledgeDir, providers } = {}) {
   const store = new RunStore(path.join(dataDir, 'runs'));
   const interrupted = store.recoverInterrupted();
   providers = providers || createProviders(config);
-  // Knowledge Base je lokální (data/kb, v .gitignore) — obsahuje zkušenosti z běhů uživatele.
-  const kb = new KnowledgeBase({ file: path.join(dataDir, 'kb', 'fr-kb.json'), config });
+  // Sdílená Knowledge Base = knowledge/ v repozitáři (jen metoda, bez textů úloh). Testy a jiné dataDir mají vlastní.
+  knowledgeDir = knowledgeDir || process.env.FR_KNOWLEDGE_DIR || (path.resolve(dataDir) === DEFAULT_DATA_DIR ? path.join(ROOT, 'knowledge') : path.join(dataDir, 'knowledge'));
+  const kb = new KnowledgeBase({ dir: knowledgeDir, config });
+  // Jednorázový převod dřívější lokální KB (v0.4.0: data/kb/fr-kb.json). Původní soubor zůstává beze změny.
+  const legacy = path.join(dataDir, 'kb', 'fr-kb.json');
+  let kbMigration = null;
+  if (kb.available() && !kb.manifest && fs.existsSync(legacy)) {
+    try { kbMigration = { from: 'data/kb/fr-kb.json', ...kb.importLegacy(legacy) }; kb.reload(); } catch (e) { kbMigration = { from: 'data/kb/fr-kb.json', error: e.message }; }
+  }
   const manager = new RunManager({ store, config, providers, kb });
   const publicDir = path.join(ROOT, 'public');
   let preflightCache = null;
@@ -90,7 +99,7 @@ function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data')
           const { run } = manager.start({ prompt: body.prompt, explicitGoal: body.explicitGoal, provider: body.provider, baseline: !!body.baseline, parentRunId: body.parentRunId || null, clarificationAnswer: body.clarificationAnswer, learningMode: body.learningMode === 'default' ? 'default' : 'auto' });
           return send(res, 202, { id: run.id, state: run.state });
         }
-        if (p === '/api/kb' && req.method === 'GET') return send(res, 200, kb.summary());
+        if (p === '/api/kb' && req.method === 'GET') { if (!manager.busy()) kb.reload(); return send(res, 200, { ...kb.summary(), migration: kbMigration }); }
         if (p === '/api/experiments' && req.method === 'POST') {
           const body = await readBody(req);
           const { run } = manager.start({ provider: body.provider, experiment: { baseRunId: String(body.baseRunId || ''), recommendationId: String(body.recommendationId || ''), confirmRealCalls: body.confirmRealCalls === true } });
@@ -124,7 +133,7 @@ function createServer({ config = loadConfig(), dataDir = path.join(ROOT, 'data')
     }
   });
 
-  return { server, store, manager, getPreflight, providers, kb };
+  return { server, store, manager, getPreflight, providers, kb, kbMigration };
 }
 
 if (require.main === module) {
