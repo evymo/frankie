@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FRANKENSTEIN v0.3.1</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233d5a3f'/%3E%3Cpath d='M9 8h14v4H13v3h8v4h-8v5H9z' fill='%23e9f1e4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">F</span>
+      <div>
+        <div class="brand-name">FRANKENSTEIN <span class="ver">v0.3.1</span></div>
+        <div class="brand-sub">Samostatný autonomní cyklus úlohy</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="providerPill" class="pill" type="button" title="Stav providerů a preflight fakturace">Načítám stav…</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <form id="runForm" class="card form" autocomplete="off">
+        <h2>Nové zadání</h2>
+        <label for="prompt">Původní prompt</label>
+        <textarea id="prompt" rows="8" required placeholder="Např.: Vypočítej (17*23+5)/2"></textarea>
+        <label for="explicitGoal">Explicitní cíl <span class="muted">(volitelné)</span></label>
+        <input id="explicitGoal" type="text" placeholder="Např.: Shrnutí do 3 bodů v angličtině">
+        <div class="row">
+          <div class="field">
+            <label for="provider">Provider</label>
+            <select id="provider"></select>
+          </div>
+          <label class="check" title="Experimentální režim: přímé řešení modelem navíc k FR cyklu (stojí další volání).">
+            <input id="baseline" type="checkbox"> BASELINE vs. FR
+          </label>
+        </div>
+        <button id="runBtn" class="primary" type="submit">Spustit cyklus</button>
+        <p id="formMsg" class="form-msg" role="status"></p>
+        <details class="examples">
+          <summary>Ukázková zadání</summary>
+          <div id="examples"></div>
+        </details>
+      </form>
+
+      <section class="card history">
+        <div class="history-head">
+          <h2>Historie běhů</h2>
+          <label class="linklike" title="Otevřít dříve exportovaný JSON bez inference">Import JSON<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+        </div>
+        <ul id="history" class="history-list"></ul>
+      </section>
+    </aside>
+
+    <main id="main" class="main">
+      <div class="empty">
+        <h1>Zadejte prompt a spusťte cyklus</h1>
+        <p>FR projde deset hledisek, nezávisle audituje cíl, rozhodne A/B/C/D, vytvoří Goal Contract, algoritmicky sestaví exekuční prompt, převezme výsledek, ověří ho proti kritériím a ukáže kompletní telemetrii.</p>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="pfDialog" class="dialog">
+    <form method="dialog">
+      <h2>Providery a preflight fakturace</h2>
+      <div id="pfBody"></div>
+      <div class="dialog-actions">
+        <button id="pfRerun" type="button">Znovu ověřit (bez inference)</button>
+        <button value="close" class="primary">Zavřít</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

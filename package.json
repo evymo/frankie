@@ -1,0 +1,16 @@
+{
+  "name": "frankenstein",
+  "version": "0.3.1",
+  "description": "FRANKENSTEIN v0.3 — samostatný autonomní cyklus úlohy (Gate 0, Goal Audit, A/B/C/D, Goal Contract, Prompt Compiler, Executor, Verifier, Telemetry)",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "preflight": "node src/cli/preflight.js"
+  }
+}

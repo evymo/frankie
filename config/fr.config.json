@@ -1,0 +1,57 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4173
+  },
+  "defaultProvider": "mock",
+  "providers": {
+    "claude-cli": {
+      "command": null,
+      "model": "claude-sonnet-5-5",
+      "minCliVersion": "2.1.0",
+      "timeoutMs": 300000,
+      "maxBudgetUsdPerCall": null,
+      "effort": null
+    },
+    "mock": {
+      "model": "mock-deterministic-1"
+    }
+  },
+  "billing": {
+    "mode": "subscription-only",
+    "extraUsageDisabledAttested": true,
+    "extraUsageAttestedBy": "Martin (potvrzeno v relaci Claude Code)",
+    "extraUsageAttestedAt": "2026-10-09",
+    "note": "Placenou extra usage nelze ověřit z CLI. Člověk ji musí zkontrolovat v claude.ai (Settings → Usage) a teprve pak nastavit extraUsageDisabledAttested=true s datem a jménem."
+  },
+  "limits": {
+    "maxModelCallsPerRun": 14,
+    "maxRepairPasses": 1,
+    "parallelism": 1,
+    "maxPromptChars": 60000,
+    "maxRetriesPerCall": 1,
+    "codeSandboxTimeoutMs": 5000
+  },
+  "capabilities": {
+    "text_generation": true,
+    "analysis": true,
+    "structured_data": true,
+    "math": true,
+    "code_generation": true,
+    "code_execution_sandbox_js": true,
+    "web_access": false,
+    "file_system_write": false,
+    "external_communication": false,
+    "payments": false,
+    "system_administration": false,
+    "image_generation": false,
+    "realtime_data": false
+  },
+  "permissions": {
+    "allowedOperationCategories": ["read_provided_input", "generate", "analyze", "transform", "compute"],
+    "forbiddenOperationCategories": ["network", "filesystem_write", "external_communication", "payment", "irreversible", "system_change", "credential_use", "other"]
+  },
+  "executor": {
+    "preferDeterministicTools": true
+  }
+}
