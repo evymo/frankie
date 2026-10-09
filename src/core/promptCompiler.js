@@ -77,7 +77,7 @@ function sections({ prompt, clarifications, contract, gate0 }) {
   ].filter(Boolean).join('\n')]);
   const trace = aspectTrace(gate0);
   const relevant = trace.included.map((t) => gate0.aspects.find((a) => a.id === t.id));
-  // Veto nástroje (hodnotitel 1.3.0) i pro zjištění hledisek z Gate 0, která jdou do promptu: číslo, které není výsledkem
+  // Veto nástroje (hodnotitel 1.3.1) i pro zjištění hledisek z Gate 0, která jdou do promptu: číslo, které není výsledkem
   // nástroje, mezivýsledkem ani v zadání, se přepíše na výsledek nástroje (Gate 0 píše tentýž model jako kontrakt).
   const guard = numberGuard(contract.toolPlan, [prompt, contract.origin && contract.origin.explicitGoal && contract.origin.explicitGoal.text, ...(clarifications || []).map((x) => x.answer)]);
   const g = (text) => (guard && text ? replaceNumbers(text, guard.foreign, guard.toolValue).text : text);

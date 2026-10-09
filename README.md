@@ -219,7 +219,7 @@ src/core/profile.js        charakteristika zadání (bez AI) a kvalitativní sho
 src/core/aspectSets.js     verzované H-sestavy; invarianty systémových garancí H1/H7/H8/H9
 src/core/knowledge.js      sdílená Knowledge Base (knowledge/, append-only), výběr sestavy, stavy důvěryhodnosti
 src/core/learning.js       diagnóza příčin, kandidátní hypotézy, řízené srovnání
-src/core/evaluator.js      verze hodnotitele s historií (1.2.0: výsledek nástroje povinný vždy; 1.3.0: veto nástroje v kontraktu)
+src/core/evaluator.js      verze hodnotitele s historií (1.2.0: výsledek nástroje povinný vždy; 1.3.1: veto nástroje v kontraktu)
 src/core/numbers.js        jeden výklad výsledného čísla (verifikátor number_equals i orákl bench/)
 src/core/gate0.js          Gate 0 — 1 AI volání pro H1–H10 + deterministické úpravy priorit, ověření citací, H7/H8 z konfigurace
 src/core/detectors.js      explicitní cíl, prompt injection, citlivá data, operace mimo oprávnění (regex, bez AI)
@@ -272,7 +272,7 @@ inference. Jádro podle backendu nevětví.
     ani zdvojeného). Úplnou shodu s převodem vyžaduje jen úplné řešení.
 
   Nástroj ale zatím nemá veto. Když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
-- **Hodnotitel 1.3.0 (v0.4.3, nález 7 z benchmarku):**
+- **Hodnotitel 1.3.1 (v0.4.3, nález 7 z benchmarku; 1.3.0 byla nevydaná pracovní verze PR #4, její výsledky jsou jen ladicí):**
   - **Veto nástroje při vzniku kontraktu, bez klíčových slov.** U `arith_eval` jsou povolená čísla: výsledek
     nástroje, mezivýsledky výrazu (17·23 = 391, 391 + 5 = 396, 396 / 2 = 198) a čísla doslovně v zadání. Jiné číslo,
     které model vloží do kontraktu, je rozpor, ať je formulované jakkoli a v jakémkoli jazyce:

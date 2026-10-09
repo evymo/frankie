@@ -233,12 +233,12 @@ test('E — SYS-4 z operace vymyšlené modelem (PASSPORT §6.1): hodnotitel ≥
   g.requestedOperations = [{ operation: 'zapsat soubory do pracovního adresáře', category: 'filesystem_write' }];
   const { run } = await runMock({ prompt, script: { gate0: g } });
   const c = run.contracts[0];
-  assert.equal(c.evaluator, '1.3.0');
+  assert.equal(c.evaluator, '1.3.1');
   assert.equal(c.blockedOperations[0].literalSupport, false);
   const sys4 = c.successCriteria.find((x) => x.id === 'SYS-4');
   assert.equal(sys4.mandatory, false);
   const v = run.branches[0].attempts.at(-1).verification;
-  assert.equal(v.evaluator, '1.3.0');
+  assert.equal(v.evaluator, '1.3.1');
   assert.notEqual(v.verdict, 'PARTIAL', 'SYS-4 bez opory verdikt neshodí');
   const item = run.learning.diagnosis[0].items.find((i) => i.criterionId === 'SYS-4');
   assert.equal(item.cause, 'evaluator_suspect');
@@ -413,7 +413,7 @@ test('G — STOP a BILLING_GUARD: učení přeskočeno / blokace viditelná v pr
   assert.ok(run.events.some((e) => e.step === 'LEARN' && e.status === 'skipped'));
 });
 
-test('Diagnóza (hodnotitel 1.3.0, nález 7): reálné selhání při rozporu kontraktu s nástrojem se nepřipíše H-sestavě', () => {
+test('Diagnóza (hodnotitel 1.3.1, nález 7): reálné selhání při rozporu kontraktu s nástrojem se nepřipíše H-sestavě', () => {
   const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
   const toolPlan = { tool: 'arith_eval', input: '(17*23+5)/2', value: 198, fullySolves: false };
   const contract = (findings, extra = []) => ({ id: 'GC-T', successCriteria: [
@@ -442,7 +442,7 @@ test('Diagnóza (hodnotitel 1.3.0, nález 7): reálné selhání při rozporu ko
   assert.equal(diagnoseBranch({ run: clean, branch: clean.branches[0] }).hFeedback, true);
 });
 
-test('Diagnóza (1.3.0): rozpor i ve SPLNĚNÉM kritériu (běh ve tvaru 0.4.2 bez nálezu) → bez HX-EDGE; SYS-4 se nepřejmenuje', () => {
+test('Diagnóza (1.3.1): rozpor i ve SPLNĚNÉM kritériu (běh ve tvaru 0.4.2 bez nálezu) → bez HX-EDGE; SYS-4 se nepřejmenuje', () => {
   const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
   const contract = { id: 'GC-L', toolPlan: { tool: 'arith_eval', input: '(17*23+5)/2', value: 198, fullySolves: false }, findings: [], blockedOperations: [{ operation: 'odeslat e-mail', category: 'external_communication', literalSupport: true }], unavailableCapabilities: [],
     successCriteria: [

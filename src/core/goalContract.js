@@ -53,7 +53,7 @@ const NON_RESULT_TYPES = new Set(['max_words', 'min_words', 'json_valid', 'json_
 const near = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
 
 /**
- * Hlídač čísel u arith_eval (veto nástroje, hodnotitel 1.3.0). Povolená čísla = výsledek nástroje ∪ mezivýsledky
+ * Hlídač čísel u arith_eval (veto nástroje, hodnotitel 1.3.1). Povolená čísla = výsledek nástroje ∪ mezivýsledky
  * výrazu ∪ čísla doslovně v zadání (a v upřesněních / explicitním cíli). Bez klíčových slov: o rozporu rozhoduje jen to,
  * zda je číslo matematicky doložené, ne jak ho model formuloval. Vrací null, když kontrakt nemá číselný nástroj.
  */
@@ -164,7 +164,7 @@ function buildContract({ runId, index, branch, decision, explicitGoal, gate0, au
   const b = basisData(branch.basis, { explicitGoal, gate0, audit });
   const plan = toolPlanFrom(gate0);
   const expectedFormat = plan && plan.fullySolves ? plan.outputFormat : audit.expectedOutput.format;
-  // Veto nástroje (hodnotitel 1.3.0): čísla z modelu, která nejsou výsledkem, mezivýsledkem ani v zadání, se do
+  // Veto nástroje (hodnotitel 1.3.1): čísla z modelu, která nejsou výsledkem, mezivýsledkem ani v zadání, se do
   // kontraktu nedostanou — v žádném kritériu ani textu, který jde do Execution Contract.
   const guard = numberGuard(plan, [prompt, explicitGoal && explicitGoal.text, ...(clarifications || []).map((x) => x.answer)]);
   const findings = [];

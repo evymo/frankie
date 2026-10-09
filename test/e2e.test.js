@@ -291,7 +291,7 @@ test('E2E — prostý převod CSV s chybnou hodnotou, model tvrdí fullySolves=f
   assert.notEqual(run.branches[0].finalVerdict, 'PASS');
 });
 
-test('E2E — veto nástroje (hodnotitel 1.3.0, nález 7): AC „obsahuje 201“ × nástroj 198 → kontrakt nese 198 a nález; správná odpověď bez opravy', async () => {
+test('E2E — veto nástroje (hodnotitel 1.3.1, nález 7): AC „obsahuje 201“ × nástroj 198 → kontrakt nese 198 a nález; správná odpověď bez opravy', async () => {
   const { mockGate0, mockAudit } = require('./helpers');
   const { diagnoseBranch, proposeHypotheses } = require('../src/core/learning');
   const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';
@@ -342,7 +342,7 @@ test('E2E — veto nástroje nezasahuje, když je kritérium z modelu v souladu 
   assert.ok(k.successCriteria.some((c) => c.verification.type === 'contains' && c.verification.params.text === '391'), 'mezivýsledek zůstal');
 });
 
-test('E2E — veto bez klíčových slov (hodnotitel 1.3.0): všechny únikové cesty z revize, správná odpověď 198 bez opravy', async () => {
+test('E2E — veto bez klíčových slov (hodnotitel 1.3.1): všechny únikové cesty z revize, správná odpověď 198 bez opravy', async () => {
   const { mockGate0, mockAudit } = require('./helpers');
   const { diagnoseBranch } = require('../src/core/learning');
   const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';

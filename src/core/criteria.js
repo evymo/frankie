@@ -172,7 +172,7 @@ async function runDeterministic(crit, result, ctx) {
       return m ? R('PASS', `Shoda: „${truncate(m[0], 120)}“.`) : R('FAIL', `Vzor /${params.pattern}/ nenalezen.`, 'Výstup neodpovídá vzoru.');
     }
     case 'number_equals': {
-      // Hodnotitel 1.3.0: ohlášený výsledek má přednost před posledním číslem (krok postupu „= 198“ nesmí
+      // Hodnotitel 1.3.1: ohlášený výsledek má přednost před posledním číslem (krok postupu „= 198“ nesmí
       // zakrýt ohlášené „je 201“). Jeden výklad s orákl benchmarku: src/core/numbers.js.
       const f = finalNumber(text);
       const tol = Number.isFinite(params.tolerance) ? params.tolerance : 1e-9;

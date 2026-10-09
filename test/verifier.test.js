@@ -137,7 +137,7 @@ test('Oprava: max. jeden průchod; ne při blokaci, SYS-2, PASS, UNVERIFIED nebo
   assert.equal(repairDecision({ verification: ver('FAIL'), execution: ex, contract, repairsUsed: 0, maxRepairs: 1, callsRemaining: 0 }).repair, false);
 });
 
-test('number_equals (hodnotitel 1.3.0): ohlášený výsledek před posledním číslem — sondy z bench/oracle.test.js, jeden výklad', async () => {
+test('number_equals (hodnotitel 1.3.1): ohlášený výsledek před posledním číslem — sondy z bench/oracle.test.js, jeden výklad', async () => {
   const ne = (expected) => crit('number_equals', { expected, tolerance: 1e-6 });
   const r = async (output, expected = 198) => (await runDeterministic(ne(expected), { output }, ctx)).result;
   // Nález 7: oprava napsala ohlášený výsledek 201 a postup končí „= 198“ → MUSÍ být FAIL.
@@ -153,7 +153,7 @@ test('number_equals (hodnotitel 1.3.0): ohlášený výsledek před posledním �
   assert.equal(await r('Bez čísla.'), 'FAIL');
 });
 
-test('number_equals (1.3.0, re-revize): „výsledkem“ bez spony a „celkem“ před pozdějším „=“ nejsou ohlášení; znak mínus U+2212', async () => {
+test('number_equals (1.3.1, re-revize): „výsledkem“ bez spony a „celkem“ před pozdějším „=“ nejsou ohlášení; znak mínus U+2212', async () => {
   const r = async (output, expected = 198) => (await runDeterministic(crit('number_equals', { expected, tolerance: 1e-6 }), { output }, ctx)).result;
   assert.equal(await r('s výsledkem 391 pokračujeme a dělíme dvěma = 198'), 'PASS');
   assert.equal(await r('celkem 396, vyděleno dvěma = 198'), 'PASS');

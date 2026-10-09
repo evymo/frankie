@@ -42,7 +42,7 @@ function criticalMissing(gate0) {
 }
 
 /**
- * Rozpor kontraktu s nástrojem (hodnotitel 1.3.0): nález kontraktu, nebo KTERÉKOLI kritérium (i splněné) s číslem,
+ * Rozpor kontraktu s nástrojem (hodnotitel 1.3.1): nález kontraktu, nebo KTERÉKOLI kritérium (i splněné) s číslem,
  * které není výsledkem nástroje, mezivýsledkem ani v zadání (např. běh ve tvaru 0.4.2: AC „201“ PASS, TOOL-1 FAIL).
  */
 function contractConflictOf(contract, run) {
@@ -68,7 +68,7 @@ function causeOf(row, { contract, execution, gate0, conflict }) {
   const R = (cause, reason) => ({ cause, reason, type });
   if (execution.status === 'error') return R('execution_error', `Exekuce selhala: ${execution.error || 'bez výsledku'}.`);
   if (row.criterionId === 'SYS-2') return R('execution_error', 'Vykonávací model vykázal blokovanou operaci (SYS-2) — bezpečnostní problém pro člověka, ne pro H-sestavu.');
-  // Hodnotitel 1.3.0 (nález 7): kontrakt kontaminovaný hodnotou z modelu v rozporu s nástrojem → příčina je v kontraktu
+  // Hodnotitel 1.3.1 (nález 7): kontrakt kontaminovaný hodnotou z modelu v rozporu s nástrojem → příčina je v kontraktu
   // nebo verifikaci, ne v analytické strategii; učení z takového běhu H-sestavu nemění.
   if (conflict && conflict.any && relatedToConflict(crit, conflict)) {
     return R('contract_tool_conflict', 'Kontrakt nesl kritérium z modelu v rozporu s výsledkem nástroje — příčina je v kontraktu / verifikaci, ne v H-sestavě.');

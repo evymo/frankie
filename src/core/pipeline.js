@@ -400,7 +400,7 @@ function stageReport(ctx) {
     evaluator: EVALUATOR_VERSION,
     branches,
     primaryVerdict: branches[0] ? branches[0].verdict : null,
-    // Nálezy kontraktu (např. veto nástroje proti hodnotě z modelu) — viditelné v reportu (hodnotitel 1.3.0).
+    // Nálezy kontraktu (např. veto nástroje proti hodnotě z modelu) — viditelné v reportu (hodnotitel 1.3.1).
     contractFindings: run.contracts.flatMap((c) => (c.findings || []).map((f) => ({ contractId: c.id, ...f }))),
     simulated: ctx.provider.simulated,
     realityNote: ctx.provider.simulated
