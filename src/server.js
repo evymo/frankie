@@ -14,6 +14,7 @@ const { KnowledgeBase } = require('./core/knowledge');
 const { EVALUATOR_VERSION, EVALUATOR_HISTORY } = require('./core/evaluator');
 const { DEFAULT_SET } = require('./core/aspectSets');
 const { createProviders } = require('./providers');
+const { modelsFor } = require('./providers/models');
 const { ASPECTS, ASPECT_CATALOG, CORE_ASPECT_IDS } = require('./core/aspects');
 const { RULES } = require('./core/decision');
 
@@ -36,15 +37,17 @@ function createServer({ config = loadConfig(), dataDir = DEFAULT_DATA_DIR, knowl
   }
   const manager = new RunManager({ store, config, providers, kb });
   const publicDir = path.join(ROOT, 'public');
-  let preflightCache = null;
-  let preflightRunning = null;
+  const preflightCache = {};
+  const preflightRunning = {};
 
-  async function getPreflight(force) {
-    const p = providers['claude-cli'];
-    if (!p) return null;
-    if (preflightCache && !force) return preflightCache;
-    if (!preflightRunning) preflightRunning = p.preflight().then((r) => { preflightCache = r; return r; }).finally(() => { preflightRunning = null; });
-    return preflightRunning;
+  async function getPreflight(force, providerId = 'claude-cli') {
+    const p = providers[providerId];
+    if (!p || !p.requiresPreflight) throw new FrError('BAD_PROVIDER', 'Preflight je dostupný jen pro CLI provider.');
+    if (preflightCache[providerId] && !force) return preflightCache[providerId];
+    if (!preflightRunning[providerId]) preflightRunning[providerId] = p.preflight()
+      .then(r => { preflightCache[providerId] = r; return r; })
+      .finally(() => { delete preflightRunning[providerId]; });
+    return preflightRunning[providerId];
   }
 
   function send(res, code, body, headers = {}) {
@@ -85,18 +88,21 @@ function createServer({ config = loadConfig(), dataDir = DEFAULT_DATA_DIR, knowl
         if (p === '/api/status' && req.method === 'GET') {
           const active = manager.busy();
           return send(res, 200, {
-            version: FR_VERSION, defaultProvider: config.defaultProvider, providers: Object.values(providers).map((x) => x.describe()),
-            preflight: preflightCache, busy: active ? { id: active.id, state: active.state } : null, limits: config.limits,
+            version: FR_VERSION, defaultProvider: config.defaultProvider, providers: Object.values(providers).map((x) => ({ ...x.describe(), models: modelsFor(x) })),
+            preflight: preflightCache['claude-cli'] || null, preflights: preflightCache, busy: active ? { id: active.id, state: active.state } : null, limits: config.limits,
             capabilities: config.capabilities, permissions: config.permissions, aspects: ASPECTS, aspectCatalog: ASPECT_CATALOG, coreAspects: CORE_ASPECT_IDS, defaultAspectSet: DEFAULT_SET, phases: PHASES, stepLabels: STEP_LABEL, decisionRules: RULES, interruptedOnStart: interrupted,
             evaluator: { version: EVALUATOR_VERSION, history: EVALUATOR_HISTORY },
             learning: { enabled: config.learning.enabled, verifyMinWins: config.learning.verifyMinWins, realExperiments: { enabled: config.learning.realExperiments.enabled, maxPerDay: config.learning.realExperiments.maxPerDay }, kbAvailable: kb.available(), kbError: kb.error },
           });
         }
-        if (p === '/api/preflight' && req.method === 'POST') return send(res, 200, await getPreflight(true));
+        if (p === '/api/preflight' && req.method === 'POST') {
+          const body = await readBody(req);
+          return send(res, 200, await getPreflight(true, body.provider || 'claude-cli'));
+        }
         if (p === '/api/runs' && req.method === 'GET') return send(res, 200, store.list());
         if (p === '/api/runs' && req.method === 'POST') {
           const body = await readBody(req);
-          const { run } = manager.start({ prompt: body.prompt, explicitGoal: body.explicitGoal, provider: body.provider, baseline: !!body.baseline, parentRunId: body.parentRunId || null, clarificationAnswer: body.clarificationAnswer, learningMode: body.learningMode === 'default' ? 'default' : 'auto' });
+          const { run } = manager.start({ prompt: body.prompt, explicitGoal: body.explicitGoal, provider: body.provider, model: body.model, baseline: !!body.baseline, parentRunId: body.parentRunId || null, clarificationAnswer: body.clarificationAnswer, learningMode: body.learningMode === 'default' ? 'default' : 'auto' });
           return send(res, 202, { id: run.id, state: run.state });
         }
         if (p === '/api/kb' && req.method === 'GET') { if (!manager.busy()) kb.reload(); return send(res, 200, { ...kb.summary(), migration: kbMigration }); }
@@ -128,7 +134,7 @@ function createServer({ config = loadConfig(), dataDir = DEFAULT_DATA_DIR, knowl
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'" });
       fs.createReadStream(file).pipe(res);
     } catch (e) {
-      const code = e.code === 'BUSY' ? 409 : e.code === 'NOT_AUTHORIZED' ? 403 : ['BAD_INPUT', 'BAD_PARENT', 'BAD_PROVIDER', 'BAD_JSON', 'TOO_LARGE', 'BAD_EXPERIMENT'].includes(e.code) ? 400 : 500;
+      const code = e.code === 'BUSY' ? 409 : e.code === 'NOT_AUTHORIZED' ? 403 : ['BAD_INPUT', 'BAD_PARENT', 'BAD_PROVIDER', 'BAD_MODEL', 'BAD_JSON', 'TOO_LARGE', 'BAD_EXPERIMENT'].includes(e.code) ? 400 : 500;
       send(res, code, { error: e.message, code: e.code || 'INTERNAL' });
     }
   });
@@ -142,11 +148,14 @@ if (require.main === module) {
   const { server, getPreflight } = createServer({ config });
   server.listen(port, '127.0.0.1', () => {
     console.log(`FRANKENSTEIN v${FR_VERSION} běží na http://127.0.0.1:${port}`);
-    console.log(`Výchozí provider: ${config.defaultProvider}. Preflight Claude CLI běží na pozadí (bez inference).`);
-    getPreflight(true).then((pf) => {
-      console.log(`Preflight Claude CLI: ${pf.ok ? 'OK — reálná inference povolena' : 'NEPROŠEL — reálná inference zablokována (mock funguje)'}`);
-      for (const c of pf.checks) console.log(`  [${c.status}] ${c.label}: ${c.detail}`);
-    }).catch((e) => console.log('Preflight selhal:', e.message));
+    console.log('Výchozí provider: ' + config.defaultProvider + '. Preflight CLI běží na pozadí (bez inference).');
+    for (const id of ['claude-cli', 'codex-cli']) {
+      getPreflight(true, id).then(pf => {
+        console.log('Preflight ' + id + ': ' + (pf.ok ? 'OK' : 'NEPROŠEL — mock funguje'));
+        for (const c of pf.checks) console.log('  [' + c.status + '] ' + c.label + ': ' + c.detail);
+      }).catch(e => console.error('Preflight ' + id + ' selhal:', e.message));
+    }
+
   });
 }
 

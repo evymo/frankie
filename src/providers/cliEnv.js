@@ -81,4 +81,32 @@ function discoverCli(configured) {
   return { path: null, source: null, tried };
 }
 
-module.exports = { sanitizedEnv, riskyEnvPresent, discoverCli, cmpVersion, ENV_WHITELIST, FORBIDDEN_ENV };
+
+/** Codex: konfigurace → FR_CODEX_CLI → PATH → ~/.local/bin → desktop bin. */
+function discoverCodexCli(configured) {
+  const tried = [];
+  const check = (p, source) => {
+    tried.push(p);
+    try { if (fs.statSync(p).isFile()) return { path: p, source, tried }; } catch (_) { /* není soubor */ }
+    return null;
+  };
+  for (const [p, source] of [[configured, 'config'], [process.env.FR_CODEX_CLI, 'FR_CODEX_CLI']]) {
+    if (p) { const found = check(p, source); if (found) return found; }
+  }
+  const name = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  for (const dir of String(process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean)) {
+    const found = check(path.join(dir, name), 'PATH'); if (found) return found;
+  }
+  const local = check(path.join(os.homedir(), '.local', 'bin', name), '~/.local/bin');
+  if (local) return local;
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    const bin = path.join(process.env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin');
+    try {
+      const versions = fs.readdirSync(bin).map(v => ({ v, time: fs.statSync(path.join(bin, v)).mtimeMs })).sort((a,b) => b.time-a.time);
+      for (const { v } of versions) { const found = check(path.join(bin, v, name), 'desktop-bundled'); if (found) return found; }
+    } catch (_) { /* desktop CLI není dostupné */ }
+  }
+  return { path: null, source: null, tried };
+}
+
+module.exports = { discoverCodexCli, sanitizedEnv, riskyEnvPresent, discoverCli, cmpVersion, ENV_WHITELIST, FORBIDDEN_ENV };

@@ -72,8 +72,8 @@ test('Argumenty CLI: izolace a žádný --bare; uživatelský text jen přes std
 });
 
 test('Registr providerů neobsahuje žádnou API/placenou cestu', () => {
-  assert.deepEqual([...ALLOWED_PROVIDER_IDS], ['mock', 'claude-cli']);
-  assert.deepEqual(Object.keys(createProviders(testConfig())).sort(), ['claude-cli', 'mock']);
+  assert.deepEqual([...ALLOWED_PROVIDER_IDS], ['mock', 'claude-cli', 'codex-cli']);
+  assert.deepEqual(Object.keys(createProviders(testConfig())).sort(), ['claude-cli', 'codex-cli', 'mock']);
   const src = fs.readdirSync(path.join(__dirname, '..', 'src'), { recursive: true }).filter((f) => f.endsWith('.js'))
     .map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8')).join('\n');
   assert.ok(!/api\.anthropic\.com|@anthropic-ai\/sdk|x-api-key/i.test(src), 'zdrojový kód nesmí volat Anthropic API přímo');

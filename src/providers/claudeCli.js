@@ -8,7 +8,7 @@
 const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { sanitizedEnv } = require('./cliEnv');
+const { sanitizedEnv, cmpVersion } = require('./cliEnv');
 const { runPreflight } = require('./preflight');
 
 function buildArgs({ model, system, effort, maxBudgetUsd }) {
@@ -78,6 +78,13 @@ class ClaudeCliProvider {
   }
 
   describe() { return { id: this.id, model: this.model, simulated: false, cli: this.lastPreflight ? this.lastPreflight.cliPath : null }; }
+
+  withModel(entry) {
+    const pc = { ...this.pc, model: entry.id };
+    if (entry.minCliVersion && cmpVersion(entry.minCliVersion, pc.minCliVersion) > 0) pc.minCliVersion = entry.minCliVersion;
+    const config = { ...this.config, providers: { ...this.config.providers, [this.id]: pc } };
+    return new this.constructor({ config, sandboxDir: this.sandboxDir, preflightFn: this.preflightFn, commandPrefixArgs: this.commandPrefixArgs });
+  }
 
   billingInfo() {
     const pf = this.lastPreflight;

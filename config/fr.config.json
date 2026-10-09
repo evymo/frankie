@@ -15,6 +15,13 @@
     },
     "mock": {
       "model": "mock-deterministic-1"
+    },
+    "codex-cli": {
+      "command": null,
+      "model": "gpt-6.1-sol",
+      "minCliVersion": "0.162.0",
+      "timeoutMs": 300000,
+      "effort": null
     }
   },
   "billing": {
@@ -22,7 +29,12 @@
     "extraUsageDisabledAttested": true,
     "extraUsageAttestedBy": "Martin (potvrzeno v relaci Claude Code)",
     "extraUsageAttestedAt": "2026-10-09",
-    "note": "Placenou extra usage nelze ověřit z CLI. Člověk ji musí zkontrolovat v claude.ai (Settings → Usage) a teprve pak nastavit extraUsageDisabledAttested=true s datem a jménem."
+    "note": "Placenou extra usage nelze ověřit z CLI. Člověk ji musí zkontrolovat v claude.ai (Settings → Usage) a teprve pak nastavit extraUsageDisabledAttested=true s datem a jménem.",
+    "codex": {
+      "creditUsageDisabledAttested": true,
+      "creditUsageAttestedBy": "Uživatel (výslovně potvrzeno v chatu)",
+      "creditUsageAttestedAt": "2026-10-09"
+    }
   },
   "limits": {
     "maxModelCallsPerRun": 14,
@@ -48,8 +60,23 @@
     "realtime_data": false
   },
   "permissions": {
-    "allowedOperationCategories": ["read_provided_input", "generate", "analyze", "transform", "compute"],
-    "forbiddenOperationCategories": ["network", "filesystem_write", "external_communication", "payment", "irreversible", "system_change", "credential_use", "other"]
+    "allowedOperationCategories": [
+      "read_provided_input",
+      "generate",
+      "analyze",
+      "transform",
+      "compute"
+    ],
+    "forbiddenOperationCategories": [
+      "network",
+      "filesystem_write",
+      "external_communication",
+      "payment",
+      "irreversible",
+      "system_change",
+      "credential_use",
+      "other"
+    ]
   },
   "executor": {
     "preferDeterministicTools": true

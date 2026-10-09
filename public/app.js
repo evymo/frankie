@@ -85,19 +85,44 @@ async function loadStatus() {
   const sel = $('#provider');
   const prev = sel.value;
   sel.innerHTML = '';
-  const pf = s.preflight;
+  const preflights = s.preflights || { 'claude-cli': s.preflight };
   for (const p of s.providers) {
-    const blocked = p.id === 'claude-cli' && !(pf && pf.ok);
-    const label = p.id === 'mock' ? 'Mock (simulace, bez inference)' : `Claude CLI — ${p.model}${blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : ''}`;
+    const pf = preflights[p.id];
+    const blocked = !p.simulated && !(pf && pf.ok);
+    const name = p.id === 'codex-cli' ? 'Codex CLI' : 'Claude CLI';
+    const label = p.simulated ? 'Mock (simulace, bez inference)' : name + (blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : '');
     sel.append(h('option', { value: p.id, disabled: blocked }, label));
   }
-  sel.value = prev && !sel.querySelector(`option[value="${prev}"]`).disabled ? prev : s.defaultProvider;
+  const previous = Array.from(sel.options).find(o => o.value === prev && !o.disabled);
+  const configured = Array.from(sel.options).find(o => o.value === s.defaultProvider && !o.disabled);
+  sel.value = previous ? previous.value : configured ? configured.value : 'mock';
+  loadModels();
+  const real = s.providers.filter(p => !p.simulated);
+  const ready = real.filter(p => preflights[p.id]?.ok);
   const pill = $('#providerPill');
-  const hasCli = s.providers.some((p) => p.id === 'claude-cli');
-  pill.className = 'pill ' + (pf ? (pf.ok ? 'ok' : 'blocked') : '');
-  pill.textContent = !hasCli ? 'Jen mock (bez reálné inference)' : pf ? (pf.ok ? 'Claude CLI: předplatné ověřeno' : 'Claude CLI: zablokováno · mock aktivní') : 'Claude CLI: ověřuji…';
+  pill.className = 'pill ' + (ready.length ? 'ok' : 'blocked');
+  pill.textContent = !real.length ? 'Jen mock (bez reálné inference)' : real.map(p => (p.id === 'codex-cli' ? 'Codex' : 'Claude') + ': ' + (preflights[p.id] ? (preflights[p.id].ok ? 'ověřeno' : 'zablokováno') : 'ověřuji…')).join(' · ');
   setBusy(s.busy);
-  if (!pf && hasCli) setTimeout(loadStatus, 1500);
+  if (real.some(p => !preflights[p.id])) setTimeout(loadStatus, 1500);
+
+}
+
+function loadModels() {
+  const provider = st.status?.providers.find(p => p.id === $('#provider').value);
+  const select = $('#model');
+  const previous = select.dataset.provider === provider?.id ? select.value : null;
+  const pf = st.status?.preflights?.[provider?.id];
+  select.innerHTML = '';
+  for (const model of provider?.models || []) {
+    const blocked = !!model.disabled;
+    select.append(h('option', { value: model.id, disabled: blocked, title: model.reason || '' },
+      model.label + (blocked ? ' (vyžaduje placené kredity)' : '')));
+  }
+  const old = Array.from(select.options).find(o => o.value === previous && !o.disabled);
+  const configured = Array.from(select.options).find(o => o.value === provider?.model && !o.disabled);
+  select.value = old ? old.value : configured ? configured.value : Array.from(select.options).find(o => !o.disabled)?.value || '';
+  select.dataset.provider = provider?.id || '';
+  select.disabled = !provider || provider.simulated || !(pf && pf.ok);
 }
 
 function setBusy(busy) {
@@ -108,18 +133,18 @@ function setBusy(busy) {
 
 function renderPreflightDialog() {
   const s = st.status || {};
-  const pf = s.preflight;
   const body = $('#pfBody');
   body.innerHTML = '';
-  body.append(
-    h('p', { class: 'note' }, 'Reálná inference běží výhradně přes Claude Code CLI s předplatným. Neexistuje přímé API ani placený fallback. Pokud preflight neprojde, reálná volání jsou zablokovaná a lze použít jen mock.'),
-    pf ? h('div', null,
-      h('p', null, h('strong', null, pf.ok ? 'Preflight PROŠEL' : 'Preflight NEPROŠEL'), ` — ${fmtTime(pf.at)}`),
-      pf.checks.map((c) => h('div', { class: 'check-row' }, h('span', { class: `s-${c.status}` }, c.status), h('div', null, h('strong', null, c.label), h('div', { class: 'muted' }, c.detail)))),
-    ) : h('p', null, 'Preflight zatím neproběhl.'),
-    h('h3', { class: 'mt' }, 'Limity'),
-    kv(Object.entries(s.limits || {}).map(([k, v]) => [k, String(v)])),
-  );
+  body.append(h('p', { class: 'note' }, 'Reálná inference běží přes Claude Code CLI nebo Codex CLI s přihlášením předplatným. Neexistuje přímé API ani placený fallback. Každý provider má vlastní preflight; při jeho selhání jsou jeho reálná volání zablokovaná. Mock zůstává dostupný.'));
+  for (const p of (s.providers || []).filter(p => !p.simulated)) {
+    const pf = (s.preflights || { 'claude-cli': s.preflight })[p.id];
+    body.append(h('h3', { class: 'mt' }, p.id === 'codex-cli' ? 'Codex CLI' : 'Claude Code CLI'));
+    body.append(pf ? h('div', null,
+      h('p', null, h('strong', null, pf.ok ? 'Preflight PROŠEL' : 'Preflight NEPROŠEL'), ' — ' + fmtTime(pf.at)),
+      pf.checks.map(c => h('div', { class: 'check-row' }, h('span', { class: 's-' + c.status }, c.status), h('div', null, h('strong', null, c.label), h('div', { class: 'muted' }, c.detail)))),
+    ) : h('p', null, 'Preflight zatím neproběhl.'));
+  }
+  body.append(h('h3', { class: 'mt' }, 'Limity'), kv(Object.entries(s.limits || {}).map(([k, v]) => [k, String(v)])));
 }
 
 /* ---------- historie ---------- */
@@ -293,7 +318,7 @@ function renderClarification(run) {
     if (!ta.value.trim()) { msg.textContent = 'Vyplňte odpověď.'; return; }
     btn.disabled = true;
     try {
-      const r = await api('/api/runs', { method: 'POST', body: JSON.stringify({ parentRunId: run.id, clarificationAnswer: ta.value, explicitGoal: goal.value, provider: run.input.options.provider, baseline: run.input.options.baseline }) });
+      const r = await api('/api/runs', { method: 'POST', body: JSON.stringify({ parentRunId: run.id, clarificationAnswer: ta.value, explicitGoal: goal.value, provider: run.input.options.provider, model: run.input.options.model || run.provider?.model, baseline: run.input.options.baseline }) });
       openRun(r.id); loadStatus();
     } catch (e) { msg.textContent = e.message; btn.disabled = false; }
   } }, 'Pokračovat s upřesněním');
@@ -331,10 +356,10 @@ function renderAnswer(run) {
   const sim = run.provider ? run.provider.simulated : run.input.options.provider === 'mock';
   const failed = run.state === 'FAILED';
   return h('section', { class: `card answer-card${sim ? ' sim' : ''}${failed ? ' fail' : ''}` }, kicker,
-    h('div', { class: 'answer-title' }, h('h2', null, failed ? 'Odpověď FR (běh nedokončen)' : 'Odpověď FR'), sim ? badge('SIMULACE — není skutečná odpověď', 'b-sim') : badge(`Claude · ${run.provider ? run.provider.model : ''}`, 'b-real')),
+    h('div', { class: 'answer-title' }, h('h2', null, failed ? 'Odpověď FR (běh nedokončen)' : 'Odpověď FR'), sim ? badge('SIMULACE — není skutečná odpověď', 'b-sim') : badge(`${run.provider?.id === 'codex-cli' ? 'Codex' : 'Claude'} · ${run.provider ? run.provider.model : ''}`, 'b-real')),
     h('p', { class: 'muted answer-q' }, `Zadání: ${run.input.prompt.length > 220 ? run.input.prompt.slice(0, 220) + '…' : run.input.prompt}`),
     failed ? h('p', { class: 'note warn' }, `Běh skončil chybou (${run.error ? run.error.code + ': ' + run.error.message : 'FAILED'}). Níže jsou výsledky větví, které stihly proběhnout.`) : null,
-    sim ? h('p', { class: 'note warn' }, 'Tento běh používal mock provider — text níže je zástupný. Pro skutečnou odpověď zvolte vlevo Provider „Claude CLI — claude-sonnet-5-5“ a spusťte znovu.') : null,
+    sim ? h('p', { class: 'note warn' }, 'Tento běh používal mock provider — text níže je zástupný. Pro skutečnou odpověď zvolte vlevo ověřený provider Claude CLI nebo Codex CLI a spusťte znovu.') : null,
     done.map((b) => {
       const e = [...b.attempts].reverse().find((a) => a.execution).execution;
       const c = run.contracts.find((x) => x.id === b.contractId);
@@ -823,7 +848,7 @@ $('#runForm').addEventListener('submit', async (e) => {
   msg.textContent = '';
   $('#runBtn').disabled = true;
   try {
-    const r = await api('/api/runs', { method: 'POST', body: JSON.stringify({ prompt: $('#prompt').value, explicitGoal: $('#explicitGoal').value, provider: $('#provider').value, baseline: $('#baseline').checked, learningMode: $('#defaultSet').checked ? 'default' : 'auto' }) });
+    const r = await api('/api/runs', { method: 'POST', body: JSON.stringify({ prompt: $('#prompt').value, explicitGoal: $('#explicitGoal').value, provider: $('#provider').value, model: $('#model').value, baseline: $('#baseline').checked, learningMode: $('#defaultSet').checked ? 'default' : 'auto' }) });
     msg.className = 'form-msg info';
     msg.textContent = st.view === 'ops' ? 'Spuštěno.' : `Běh ${r.id} spuštěn.`;
     await loadStatus();
@@ -834,11 +859,12 @@ $('#runForm').addEventListener('submit', async (e) => {
   }
 });
 
+$('#provider').addEventListener('change', loadModels);
 $('#providerPill').addEventListener('click', () => { renderPreflightDialog(); $('#pfDialog').showModal(); });
 $('#kbOpen').addEventListener('click', async () => { await loadKb(); renderKbDialog(); $('#kbDialog').showModal(); });
 $('#pfRerun').addEventListener('click', async () => {
   $('#pfRerun').disabled = true;
-  try { await api('/api/preflight', { method: 'POST', body: '{}' }); await loadStatus(); renderPreflightDialog(); } finally { $('#pfRerun').disabled = false; }
+  try { await Promise.all(st.status.providers.filter(p => !p.simulated).map(p => api('/api/preflight', { method: 'POST', body: JSON.stringify({ provider: p.id }) }))); await loadStatus(); renderPreflightDialog(); } finally { $('#pfRerun').disabled = false; }
 });
 
 $('#importFile').addEventListener('change', async (e) => {

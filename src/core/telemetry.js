@@ -85,7 +85,7 @@ class Telemetry {
       aiMs,
       algorithmicMs: Math.max(0, totalMs - aiMs),
       costUsdEstimate: usdKnown.length ? Math.round(usdKnown.reduce((a, c) => a + c.costUsdEstimate, 0) * 1e6) / 1e6 : null,
-      costUsdNote: 'Odhad nákladového ekvivalentu podle Claude Code CLI (total_cost_usd). Při předplatném NEJDE o zaplacenou částku.',
+      costUsdNote: this.provider.id === 'codex-cli' ? 'Codex CLI nehlásí odhad USD; hodnota není dostupná.' : 'Odhad nákladového ekvivalentu podle Claude Code CLI (total_cost_usd). Při předplatném NEJDE o zaplacenou částku.',
       verifiedBilling: 'NEOVĚŘENO — skutečnou fakturaci nelze z CLI zjistit; předplatitelský režim ověřen pouze preflightem.',
       billing: this.billing,
       provider: this.provider,

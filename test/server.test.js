@@ -216,7 +216,7 @@ test('Server v0.4: reálný experiment je bez povolení v konfiguraci odmítnut 
   const providers = makeProviders(config);
   // „reálný“ provider pro test oprávnění: mock, který se vydává za nesimulovaný a počítá volání
   let realCalls = 0;
-  const fakeReal = new MockProvider({ model: 'fake-real' });
+  const fakeReal = new MockProvider({ model: 'claude-sonnet-5-5' });
   fakeReal.id = 'claude-cli'; fakeReal.simulated = false;
   const inner = fakeReal.call.bind(fakeReal);
   fakeReal.call = async (r) => { realCalls++; const x = await inner(r); return { ...x, simulated: false }; };
@@ -238,4 +238,54 @@ test('Server v0.4: reálný experiment je bez povolení v konfiguraci odmítnut 
     server.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+test('Server: Codex has its own preflight cache and failed guard blocks inference', async () => {
+  const { CodexCliProvider } = require('../src/providers/codexCli');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-codex-srv-'));
+  const config = testConfig();
+  const providers = makeProviders(config);
+  let preflights = 0, calls = 0;
+  providers['codex-cli'] = new CodexCliProvider({ config, sandboxDir: path.join(dataDir, 'cli'),
+    preflightFn: async () => { preflights++; return { ok: false, at: 'now', authMethod: 'chatgpt', checks: [{id:'credits',status:'FAIL'}] }; } });
+  providers['codex-cli'].call = async () => { calls++; throw Error('must not run'); };
+  const { server, getPreflight } = createServer({ config, dataDir, providers });
+  await new Promise(ok => server.listen(0,'127.0.0.1',ok));
+  const port=server.address().port;
+  try {
+    const pf=await req(port,'POST','/api/preflight',{provider:'codex-cli'});
+    assert.equal(pf.status,200); assert.equal(pf.json.authMethod,'chatgpt'); assert.equal(preflights,1);
+    await getPreflight(false,'codex-cli'); assert.equal(preflights,1);
+    const status=await req(port,'GET','/api/status');
+    assert.equal(status.json.preflights['codex-cli'].ok,false);
+    assert.equal(status.json.preflight,null);
+    assert.ok(status.json.providers.some(p=>p.id==='codex-cli'));
+    assert.equal((await req(port,'POST','/api/preflight',{provider:'mock'})).status,400);
+    const started=await req(port,'POST','/api/runs',{provider:'codex-cli',prompt:'Vypočítej 2+2'});
+    assert.equal(started.status,202);
+    const run=await waitDone(port,started.json.id);
+    assert.equal(run.error.code,'BILLING_GUARD'); assert.equal(calls,0);
+    assert.equal(run.telemetry.calls.length,0);
+  } finally {await new Promise(ok=>server.close(ok));fs.rmSync(dataDir,{recursive:true,force:true});}
+});
+
+test('Server: model catalog exposed and cross-provider/paid models rejected before starting a run', async () => {
+  const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'fr-model-http-'));
+  const config=testConfig();
+  const {server}=createServer({config,dataDir});
+  await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
+  const port=server.address().port;
+  try {
+    const status=await req(port,'GET','/api/status');
+    assert.equal(status.json.providers.find(p=>p.id==='codex-cli').models.length,7);
+    assert.equal(status.json.providers.find(p=>p.id==='claude-cli').models.length,4);
+    for(const [provider,model] of [['claude-cli','gpt-6-astra'],['codex-cli','claude-opus-5-5'],['claude-cli','claude-fable-5-1']]) {
+      const response=await req(port,'POST','/api/runs',{prompt:'Test',provider,model});
+      assert.equal(response.status,400);assert.equal(response.json.code,'BAD_MODEL');
+    }
+    assert.deepEqual((await req(port,'GET','/api/runs')).json,[]);
+    const run=await req(port,'POST','/api/runs',{prompt:'Vypočítej 2+2',provider:'mock',model:'mock-deterministic-1'});
+    const done=await waitDone(port,run.json.id);
+    assert.equal(done.input.options.model,'mock-deterministic-1');
+  } finally {await new Promise(ok=>server.close(ok));fs.rmSync(dataDir,{recursive:true,force:true});}
 });

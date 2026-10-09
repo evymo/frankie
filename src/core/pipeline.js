@@ -12,6 +12,7 @@ const { newId, nowIso, sha256, extractJson, clone, deepFreeze } = require('./uti
 const { validate } = require('./schema');
 const S = require('./schemas');
 const { Telemetry } = require('./telemetry');
+const { selectProviderModel } = require('../providers/models');
 const { extractExplicitGoal } = require('./detectors');
 const { processGate0 } = require('./gate0');
 const { processAudit, planComparison, mergeComparison } = require('./goalAudit');
@@ -67,7 +68,7 @@ function combinedText(input) {
   return [input.prompt, ...(input.clarifications || []).map((c) => c.answer)].join('\n');
 }
 
-function createRun({ prompt, explicitGoal, provider, baseline, parent, clarificationAnswer, config, learningMode, experiment }) {
+function createRun({ prompt, explicitGoal, provider, model, baseline, parent, clarificationAnswer, config, learningMode, experiment }) {
   if (parent && experiment) throw new FrError('BAD_INPUT', 'Experiment nelze kombinovat s upřesněním.');
   if (parent) {
     if (parent.state !== 'CLARIFICATION_REQUIRED') throw new FrError('BAD_PARENT', 'Navázat lze jen na běh ve stavu CLARIFICATION_REQUIRED.');
@@ -100,7 +101,7 @@ function createRun({ prompt, explicitGoal, provider, baseline, parent, clarifica
     input: {
       prompt, promptSha256: sha256(prompt), explicitGoalField: String(explicitGoal || '').trim() || null, clarifications,
       parentRunId: parent ? parent.id : null, previousExplicitGoal: parent ? parent.input.explicitGoalField : null,
-      options: { provider, baseline: !!baseline, learningMode: experiment ? 'experiment' : learningMode === 'default' ? 'default' : 'auto' },
+      options: { provider, model: model || null, baseline: !!baseline, learningMode: experiment ? 'experiment' : learningMode === 'default' ? 'default' : 'auto' },
     },
     experiment: experiment ? {
       baseRunId: experiment.baseRun.id, recommendationId: experiment.rec.id, changeText: experiment.rec.changeText,
@@ -590,15 +591,19 @@ class RunManager {
 
   busy() { return this.active; }
 
-  start({ prompt, explicitGoal, provider, baseline, parentRunId, clarificationAnswer, learningMode, experiment }) {
+  start({ prompt, explicitGoal, provider, model, baseline, parentRunId, clarificationAnswer, learningMode, experiment }) {
     if (this.active) throw new FrError('BUSY', `Již probíhá běh ${this.active.id} (stav ${this.active.state}). Souběžné běhy nejsou povoleny.`);
-    const providerId = provider || this.config.defaultProvider;
-    const p = this.providers[providerId];
-    if (!p) throw new FrError('BAD_PROVIDER', `Neznámý provider „${providerId}“.`);
     const parent = parentRunId ? this.store.load(parentRunId) : null;
     if (parentRunId && !parent) throw new FrError('BAD_PARENT', 'Nadřazený běh neexistuje.');
-    const plan = experiment ? planExperiment({ baseRun: /^[A-Za-z0-9-]+$/.test(experiment.baseRunId) ? this.store.load(experiment.baseRunId) : null, kb: this.kb, config: this.config, provider: p, recommendationId: experiment.recommendationId, confirmRealCalls: experiment.confirmRealCalls }) : null;
-    const run = createRun({ prompt, explicitGoal, provider: providerId, baseline, parent, clarificationAnswer, config: this.config, learningMode, experiment: plan });
+    const experimentBase = experiment && /^[A-Za-z0-9-]+$/.test(experiment.baseRunId) ? this.store.load(experiment.baseRunId) : null;
+    const providerId = provider || experimentBase?.provider.id || parent?.input.options.provider || this.config.defaultProvider;
+    const baseProvider = this.providers[providerId];
+    if (!baseProvider) throw new FrError('BAD_PROVIDER', 'Neznámý provider: ' + providerId);
+    const inheritedModel = experimentBase?.provider.id === providerId ? experimentBase.provider.model : parent?.input.options.provider === providerId ? parent.input.options.model : undefined;
+    const requestedModel = model === undefined ? inheritedModel : model;
+    const p = selectProviderModel(baseProvider, requestedModel);
+    const plan = experiment ? planExperiment({ baseRun: experimentBase, kb: this.kb, config: this.config, provider: p, recommendationId: experiment.recommendationId, confirmRealCalls: experiment.confirmRealCalls }) : null;
+    const run = createRun({ prompt, explicitGoal, provider: providerId, model: p.model, baseline, parent, clarificationAnswer, config: this.config, learningMode, experiment: plan });
     this.active = run;
     this.store.save(run);
     const done = runPipeline({ run, provider: p, config: this.config, persist: (r) => this.store.save(r), kb: this.kb, experiment: plan })
