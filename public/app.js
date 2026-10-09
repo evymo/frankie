@@ -77,6 +77,13 @@ async function api(path, opts = {}) {
 }
 
 /* ---------- stav a providery ---------- */
+/** Název provideru pro UI: vestavěná CLI mají pevné jméno, ostatní (např. z bench/serve.js) své id. */
+function providerName(id, short) {
+  if (id === 'codex-cli') return short ? 'Codex' : 'Codex CLI';
+  if (id === 'claude-cli') return short ? 'Claude' : 'Claude CLI';
+  return id || '';
+}
+
 async function loadStatus() {
   try {
     st.status = await api('/api/status');
@@ -89,8 +96,7 @@ async function loadStatus() {
   for (const p of s.providers) {
     const pf = preflights[p.id];
     const blocked = !p.simulated && !(pf && pf.ok);
-    // Popisek dodává provider (describe().label); jinak výchozí jména CLI providerů.
-    const name = p.label || (p.id === 'codex-cli' ? 'Codex CLI' : 'Claude CLI');
+    const name = p.label || providerName(p.id);
     const label = p.simulated ? 'Mock (simulace, bez inference)' : name + (blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : '');
     sel.append(h('option', { value: p.id, disabled: blocked }, label));
   }
@@ -102,7 +108,7 @@ async function loadStatus() {
   const ready = real.filter(p => preflights[p.id]?.ok);
   const pill = $('#providerPill');
   pill.className = 'pill ' + (ready.length ? 'ok' : 'blocked');
-  pill.textContent = !real.length ? 'Jen mock (bez reálné inference)' : real.map(p => (p.id === 'codex-cli' ? 'Codex' : p.id === 'claude-cli' ? 'Claude' : p.id) + ': ' + (preflights[p.id] ? (preflights[p.id].ok ? 'ověřeno' : 'zablokováno') : 'ověřuji…')).join(' · ');
+  pill.textContent = !real.length ? 'Jen mock (bez reálné inference)' : real.map(p => providerName(p.id, true) + ': ' + (preflights[p.id] ? (preflights[p.id].ok ? 'ověřeno' : 'zablokováno') : 'ověřuji…')).join(' · ');
   setBusy(s.busy);
   if (real.some(p => !preflights[p.id])) setTimeout(loadStatus, 1500);
 
@@ -139,7 +145,7 @@ function renderPreflightDialog() {
   body.append(h('p', { class: 'note' }, 'Reálná inference běží přes Claude Code CLI nebo Codex CLI s přihlášením předplatným. Neexistuje přímé API ani placený fallback. Každý provider má vlastní preflight; při jeho selhání jsou jeho reálná volání zablokovaná. Mock zůstává dostupný.'));
   for (const p of (s.providers || []).filter(p => !p.simulated)) {
     const pf = (s.preflights || { 'claude-cli': s.preflight })[p.id];
-    body.append(h('h3', { class: 'mt' }, p.id === 'codex-cli' ? 'Codex CLI' : 'Claude Code CLI'));
+    body.append(h('h3', { class: 'mt' }, p.label || (p.id === 'claude-cli' ? 'Claude Code CLI' : providerName(p.id))));
     body.append(pf ? h('div', null,
       h('p', null, h('strong', null, pf.ok ? 'Preflight PROŠEL' : 'Preflight NEPROŠEL'), ' — ' + fmtTime(pf.at)),
       pf.checks.map(c => h('div', { class: 'check-row' }, h('span', { class: 's-' + c.status }, c.status), h('div', null, h('strong', null, c.label), h('div', { class: 'muted' }, c.detail)))),
@@ -357,7 +363,7 @@ function renderAnswer(run) {
   const sim = run.provider ? run.provider.simulated : run.input.options.provider === 'mock';
   const failed = run.state === 'FAILED';
   return h('section', { class: `card answer-card${sim ? ' sim' : ''}${failed ? ' fail' : ''}` }, kicker,
-    h('div', { class: 'answer-title' }, h('h2', null, failed ? 'Odpověď FR (běh nedokončen)' : 'Odpověď FR'), sim ? badge('SIMULACE — není skutečná odpověď', 'b-sim') : badge(`${run.provider?.id === 'codex-cli' ? 'Codex' : 'Claude'} · ${run.provider ? run.provider.model : ''}`, 'b-real')),
+    h('div', { class: 'answer-title' }, h('h2', null, failed ? 'Odpověď FR (běh nedokončen)' : 'Odpověď FR'), sim ? badge('SIMULACE — není skutečná odpověď', 'b-sim') : badge(`${providerName(run.provider?.id, true)} · ${run.provider ? run.provider.model : ''}`, 'b-real')),
     h('p', { class: 'muted answer-q' }, `Zadání: ${run.input.prompt.length > 220 ? run.input.prompt.slice(0, 220) + '…' : run.input.prompt}`),
     failed ? h('p', { class: 'note warn' }, `Běh skončil chybou (${run.error ? run.error.code + ': ' + run.error.message : 'FAILED'}). Níže jsou výsledky větví, které stihly proběhnout.`) : null,
     sim ? h('p', { class: 'note warn' }, 'Tento běh používal mock provider — text níže je zástupný. Pro skutečnou odpověď zvolte vlevo ověřený provider Claude CLI nebo Codex CLI a spusťte znovu.') : null,

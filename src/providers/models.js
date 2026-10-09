@@ -20,9 +20,9 @@ const MODEL_CATALOG = Object.freeze({
 });
 function modelsFor(provider) {
   if (provider.simulated) return [{ id: provider.model, label: 'Deterministický mock' }];
-  // Provider mimo katalog (např. integrační harness) smí seznam dodat sám — bez větvení podle id v jádru.
-  if (typeof provider.models === 'function') return provider.models();
-  return MODEL_CATALOG[provider.id] || [];
+  // Katalog vestavěných CLI má přednost (zákaz Fable a placených modelů nejde obejít);
+  // provider mimo katalog (např. integrační harness) smí seznam dodat sám — bez větvení podle id v jádru.
+  return MODEL_CATALOG[provider.id] || (typeof provider.models === 'function' ? provider.models() : []);
 }
 function selectProviderModel(provider, requested) {
   const model = requested === undefined || requested === null ? provider.model : requested;

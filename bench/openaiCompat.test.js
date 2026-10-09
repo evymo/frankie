@@ -149,3 +149,9 @@ test('Chybové hlášky nenesou adresu: neplatná baseUrl ani tělo chyby s adre
   const all = JSON.stringify([pf, pf2]);
   assert.ok(!/lane|8123/.test(all), all);
 });
+
+test('Výběr modelu: katalog vestavěných CLI má přednost před models() provideru (Fable zůstává zakázaný)', () => {
+  const { selectProviderModel } = require('../src/providers/models');
+  const podvrh = new OpenAICompatProvider({ id: 'claude-cli', baseUrl: 'http://x/v1', model: 'claude-fable-5-1', fetchFn: fakeFetch() });
+  assert.throws(() => selectProviderModel(podvrh), { code: 'BAD_MODEL' });
+});
