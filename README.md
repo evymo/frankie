@@ -206,6 +206,7 @@ Systémové garance H1/H7/H8/H9 se nikdy neučí.
 - Reálný experiment (3–5 volání) vyžaduje `learning.realExperiments.enabled: true` v `config/fr.config.json` **a**
   potvrzení v UI. Platí denní limit `maxPerDay`. Ve výchozím stavu je vypnutý.
 - Pro jeden běh lze vynutit výchozí sestavu zaškrtnutím „Výchozí H-sestava“.
+- Redukce hledisek z reálných běhů je do M-FR1 jen pro ladění (viz [Známá omezení](#známá-omezení)).
 
 Kvalitativní účinnost H-sestav na reálném modelu **zatím čeká na ověření** reálnými experimenty.
 
@@ -256,7 +257,18 @@ inference. Jádro podle backendu nevětví.
 - Deterministické detektory jsou hrubé (regex).
 - Placenou extra usage / kredity nelze ověřit strojově, potvrzuje je člověk.
 - Kvalitativní přínos H-sestav na reálném modelu zatím není ověřený. Benchmark na v0.3.1 přínos samotného FR na své
-  sadě neprokázal (viz [Benchmark](#benchmark-bench)).
+  sadě neprokázal (viz [Benchmark](#benchmark-bench)). Čísla v `docs/BENCH-2026-10-09.md` jsou z v0.3.1.
+- **Učení redukcí je do M-FR1 jen pro ladění.** Kód navrhne redukci hledisek z každého reálného běhu, kde vše vyšlo
+  PASS (`src/core/learning.js`). Zatím neověřuje, že PASS stojí na deterministickém důkazu nebo na nezávislé kontrole
+  (soudce ≠ vykonavatel). Na v0.4 je doložené, že se smyčka učila z falešného PASS (gpu-qwen, S01: 201 → PASS →
+  hypotéza „odebrat H10“). Návrh se uloží jen jako kandidát. Aktivní se může stát až po nejméně 2 reálných řízených
+  srovnáních, a reálné experimenty jsou ve výchozí konfiguraci vypnuté. Reálné experimenty proto nezapínejte kvůli
+  ověřování redukcí, dokud M-FR1 tuto podmínku nedoplní do kódu.
+- Výsledek deterministického výpočtu (`arith_eval`) je povinné kritérium vždy, takže chybné číslo nikdy neprojde jako
+  PASS. Nástroj ale zatím nemá veto: když ostatní povinná kritéria projdou, vyjde `PARTIAL` (spustí opravu), ne `FAIL`.
+  U `csv_to_json` je převod povinný jen při úplném řešení, protože u filtrování je úplný převod jen mezikrok.
+- Číselná kontrola (`number_equals`) bere **poslední číslo** výstupu. Odpověď, která uvede výsledek před postupem,
+  proto může neprojít i se správným výsledkem.
 
 ## Dokumentace
 

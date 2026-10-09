@@ -30,12 +30,15 @@ function toolPlanFrom(gate0) {
 
 function toolCriteria(plan) {
   if (!plan) return [];
-  const mandatory = plan.fullySolves;
   if (plan.tool === 'arith_eval') {
-    return [{ id: 'TOOL-1', description: `Číselný výsledek odpovídá přesnému výpočtu ${plan.input} = ${plan.value}.`, mandatory, verification: { kind: 'deterministic', type: 'number_equals', params: { expected: plan.value, tolerance: 1e-6 } }, origin: 'deterministic_tool' }];
+    // Číselný výsledek nástroje je povinný vždy, i když nástroj úlohu řeší jen zčásti (např. „a vysvětli postup“).
+    // Bench S01: model 201 × nástroj 198 vyšlo jako PASS a učení z toho navrhlo analyzovat méně.
+    return [{ id: 'TOOL-1', description: `Číselný výsledek odpovídá přesnému výpočtu ${plan.input} = ${plan.value}.`, mandatory: true, verification: { kind: 'deterministic', type: 'number_equals', params: { expected: plan.value, tolerance: 1e-6 } }, origin: 'deterministic_tool' }];
   }
   if (plan.tool === 'csv_to_json') {
-    return [{ id: 'TOOL-1', description: 'JSON obsahově odpovídá deterministickému převodu vstupního CSV.', mandatory, verification: { kind: 'deterministic', type: 'json_equals', params: { expected: plan.value } }, origin: 'deterministic_tool' }];
+    // Úplný převod je očekávaný výsledek jen u úplného řešení; u filtrování nebo řazení by povinné json_equals
+    // shodilo i správnou odpověď (nástroj tu spočítal jen mezikrok).
+    return [{ id: 'TOOL-1', description: 'JSON obsahově odpovídá deterministickému převodu vstupního CSV.', mandatory: plan.fullySolves, verification: { kind: 'deterministic', type: 'json_equals', params: { expected: plan.value } }, origin: 'deterministic_tool' }];
   }
   return [];
 }

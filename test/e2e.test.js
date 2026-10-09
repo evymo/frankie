@@ -231,3 +231,35 @@ test('Stavový automat: nepovolený přechod je odmítnut', () => {
   transition(ctx, 'GOAL_AUDIT');
   assert.equal(ctx.run.state, 'GOAL_AUDIT');
 });
+
+test('E2E — výsledek deterministického nástroje je povinný vždy: S01 201 × TOOL 198 ≠ PASS a oprava', async () => {
+  const { mockGate0, mockAudit } = require('./helpers');
+  const prompt = 'Vypočítej (17*23+5)/2 a vysvětli postup.';
+  // Jako Qwen v benchmarku: Gate 0 uzná nástroj jen jako dílčí (fullySolves=false) a audit nedodá číselné kritérium,
+  // takže o správnosti čísla rozhoduje jen TOOL-1.
+  const g = mockGate0({ prompt });
+  const gate0 = { ...g, toolCandidates: g.toolCandidates.map((c) => ({ ...c, fullySolves: false })) };
+  const a = mockAudit({ prompt });
+  const audit = { ...a, acceptanceCriteria: a.acceptanceCriteria.filter((c) => c.check.type !== 'number_equals') };
+  const wrong = { status: 'completed', output: '17 * 23 = 391, 391 + 5 = 396, 396 / 2 = 201.\nVýsledek je 201.', outputFormat: 'text', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] };
+  const { run, provider } = await runMock({ prompt, script: { gate0, goal_audit: audit, execute: wrong } });
+  const b = run.branches[0];
+  assert.ok(run.contracts[0].toolPlan && run.contracts[0].toolPlan.fullySolves === false, 'nástroj jen dílčí');
+  assert.equal(run.contracts[0].successCriteria.find((c) => c.id === 'TOOL-1').mandatory, true);
+  assert.equal(criterion(run, 0, 'TOOL-1', 0).result, 'FAIL');
+  // Povinné FAIL + jiná povinná PASS = PARTIAL (computeVerdict); podstatné je, že to není PASS a spustí se oprava.
+  assert.ok(['FAIL', 'PARTIAL'].includes(b.attempts[0].verification.verdict), b.attempts[0].verification.verdict);
+  assert.equal(b.attempts.length, 2, 'oprava se spustila');
+  assert.equal(provider.counts.execute, 2);
+  assert.notEqual(b.finalVerdict, 'PASS');
+});
+
+test('E2E — CSV s filtrem: úplný převod nástrojem je jen mezikrok, správnou odpověď nesmí shodit', async () => {
+  const prompt = 'Převeď CSV na JSON a ponech jen lidi starší 30 let:\njmeno,vek\nAna,25\nBob,40\nCyril,35';
+  const correct = { status: 'completed', output: '[{"jmeno":"Bob","vek":40},{"jmeno":"Cyril","vek":35}]', outputFormat: 'json', artifacts: [], completedOperations: [], blockedOperations: [], assumptionsUsed: [], criteriaSelfReport: [] };
+  const { run } = await runMock({ prompt, script: { execute: correct } });
+  assert.equal(run.contracts[0].toolPlan.fullySolves, false);
+  assert.equal(run.contracts[0].successCriteria.find((c) => c.id === 'TOOL-1').mandatory, false);
+  assert.ok(!['FAIL', 'PARTIAL'].includes(run.branches[0].attempts[0].verification.verdict));
+  assert.equal(run.branches[0].attempts.length, 1, 'bez zbytečné opravy');
+});
