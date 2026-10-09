@@ -89,7 +89,8 @@ async function loadStatus() {
   for (const p of s.providers) {
     const pf = preflights[p.id];
     const blocked = !p.simulated && !(pf && pf.ok);
-    const name = p.id === 'codex-cli' ? 'Codex CLI' : 'Claude CLI';
+    // Popisek dodává provider (describe().label); jinak výchozí jména CLI providerů.
+    const name = p.label || (p.id === 'codex-cli' ? 'Codex CLI' : 'Claude CLI');
     const label = p.simulated ? 'Mock (simulace, bez inference)' : name + (blocked ? (pf ? ' (zablokováno preflightem)' : ' (ověřuji…)') : '');
     sel.append(h('option', { value: p.id, disabled: blocked }, label));
   }
@@ -101,7 +102,7 @@ async function loadStatus() {
   const ready = real.filter(p => preflights[p.id]?.ok);
   const pill = $('#providerPill');
   pill.className = 'pill ' + (ready.length ? 'ok' : 'blocked');
-  pill.textContent = !real.length ? 'Jen mock (bez reálné inference)' : real.map(p => (p.id === 'codex-cli' ? 'Codex' : 'Claude') + ': ' + (preflights[p.id] ? (preflights[p.id].ok ? 'ověřeno' : 'zablokováno') : 'ověřuji…')).join(' · ');
+  pill.textContent = !real.length ? 'Jen mock (bez reálné inference)' : real.map(p => (p.id === 'codex-cli' ? 'Codex' : p.id === 'claude-cli' ? 'Claude' : p.id) + ': ' + (preflights[p.id] ? (preflights[p.id].ok ? 'ověřeno' : 'zablokováno') : 'ověřuji…')).join(' · ');
   setBusy(s.busy);
   if (real.some(p => !preflights[p.id])) setTimeout(loadStatus, 1500);
 

@@ -19,7 +19,10 @@ const MODEL_CATALOG = Object.freeze({
   ].map(Object.freeze)),
 });
 function modelsFor(provider) {
-  return provider.simulated ? [{ id: provider.model, label: 'Deterministický mock' }] : MODEL_CATALOG[provider.id] || [];
+  if (provider.simulated) return [{ id: provider.model, label: 'Deterministický mock' }];
+  // Provider mimo katalog (např. integrační harness) smí seznam dodat sám — bez větvení podle id v jádru.
+  if (typeof provider.models === 'function') return provider.models();
+  return MODEL_CATALOG[provider.id] || [];
 }
 function selectProviderModel(provider, requested) {
   const model = requested === undefined || requested === null ? provider.model : requested;
